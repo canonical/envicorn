@@ -1,0 +1,167 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "type": "object",
+    "properties": {
+        "actions": {
+            "type": "array",
+            "items": {
+                "anyOf": [
+                    {
+                        "type": "object",
+                        "properties": {
+                            "action": {
+                                "type": "string",
+                                "enum": ["load_template"]
+                            },
+                            "name": {"type": "string"}
+                        },
+                        "required": ["action", "name"],
+                        "additionalProperties": false
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "action": {
+                                "type": "string",
+                                "enum": ["install_snap"]
+                            },
+                            "name": {
+                                "type": "string",
+                                "description": "the snap name"
+                            },
+                            "track": {
+                                "type": "string",
+                                "description": "the track of snap",
+                                "default": "latest"
+                            },
+                            "risk": {
+                                "type": "string",
+                                "default": "stable"
+                            },
+                            "branch": {
+                                "type": "string"
+                            },
+                            "revision": {
+                                "type": "string",
+                                "description": "will install specific revision without track",
+                                "pattern": "[0-9]*"
+                            },
+                            "mode": {
+                                "type": "string",
+                                "enum": ["classic", "devmode", "dangerous"],
+                                "description": "Install snap on specific mode",
+                                "default": ""
+                            },
+                            "post_commands": {
+                                "type": "string"
+                            }
+                        },
+                        "required": ["action", "name"],
+                        "dependencies": {
+                            "risk": [
+                                "track"
+                            ],
+                            "branch": [
+                                "risk"
+                            ]
+                        },
+                        "additionalProperties": false
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "action": {
+                                "type": "string",
+                                "enum": ["install_debian"]
+                            },
+                            "name": {
+                                "type": "string"
+                            },
+                            "repo": {
+                                "type": "string"
+                            },
+                            "revision": {
+                                "type": "string",
+                                "description": "will install specific revision"
+                            }
+                        },
+                        "required": ["action", "name"],
+                        "additionalProperties": false
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "action": {
+                                "type": "string",
+                                "enum": ["ssh_command"]
+                            },
+                            "command": {"type": "string"},
+                            "continue_on_error": {
+                                "type": "boolean",
+                                "default": false
+                            }
+                        },
+                        "required": ["action", "command"],
+                        "additionalProperties": false
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "action": {
+                                "type": "string",
+                                "enum": ["scp_command"]
+                            },
+                            "source": {"type": "string"},
+                            "destination": {"type": "string"}
+                        },
+                        "required": ["action", "source", "destination"],
+                        "additionalProperties": false
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "action": {
+                                "type": "string",
+                                "enum": [
+                                    "create_service"
+                                ]
+                            },
+                            "service_raw": {
+                                "type": "string"
+                            },
+                            "service_file_dest": {
+                                "type": "string",
+                                "default": "/etc/systemd/system"
+                            },
+                            "script_file": {
+                                "type": "string"
+                            },
+                            "script_file_dest": {
+                                "type": "string"
+                            },
+                            "service_name": {
+                                "type": "string"
+                            },
+                            "post_commands": {
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "action",
+                            "service_raw",
+                            "service_file_dest",
+                            "service_name"
+                        ],
+                        "dependencies": {
+                            "script_file": [
+                                "script_file_dest"
+                            ]
+                        },
+                        "additionalProperties": false
+                    }
+                ]
+            }
+        }
+    },
+    "additionalProperties": false
+}

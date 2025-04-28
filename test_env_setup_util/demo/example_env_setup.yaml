@@ -1,0 +1,27 @@
+actions:
+  - action: install_snap
+    name: test-snapd-tools-core22
+    track: latest
+    risk: edge
+    mode: devmode
+    post_commands: snap list
+  - action: install_debian
+    name: bluez
+  - action: ssh_command
+    command: |
+      whoami
+      date
+      sudo dmesg -T | head -n 10
+  - action: ssh_command
+    continue_on_error: true
+    command: |
+      if [ "0" -eq "0" ]; then
+          echo "pass"
+      fi
+      cat ABC.txt
+      echo "all done"
+  - action: scp_command
+    source: enable_audio_via_alsa.py
+    destination: enable_audio_via_alsa.py
+  - action: load_template
+    name: get_initial_network_info.yaml

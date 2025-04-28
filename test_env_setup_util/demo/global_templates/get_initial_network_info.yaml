@@ -1,0 +1,16 @@
+actions:
+  - action: create_service
+    service_name: check-network-info.service
+    service_raw: |
+      [Unit]
+      Description=this is a service to check network settings
+      After=systemd-networkd-wait-online.service
+
+      [Service]
+      Type=oneshot
+      ExecStart=ip a
+
+      [Install]
+      WantedBy=multi-user.target
+    service_file_dest: /etc/systemd/system
+    post_commands: sudo systemctl status check-network-info.service

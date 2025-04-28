@@ -1,0 +1,42 @@
+name: ceqa-env-setup-tools
+type: app
+base: core22
+grade: devel
+summary: A tools to setup test environment on DUT side and server side
+description: |
+  this scripts is helps QA engineer to setup the test environment on DUT,
+  and setup the iperf3 server and OBEX server on another device.
+version: "0.1"
+confinement: devmode
+architectures:
+  - build-on: arm64
+  - build-on: armhf
+  - build-on: amd64
+
+plugs: {}
+slots: {}
+
+apps:
+  test-env-setup:
+    environment:
+      PYTHONPATH: "$SNAP/test_env_setup_util/usr/lib/python3/dist-packages"
+      LD_LIBRARY_PATH: $LD_LIBRARY_PATH:$SNAP/test_env_setup_util/usr/lib/$SNAPCRAFT_ARCH_TRIPLET
+    command: test_env_setup_util/env_setup.py
+    plugs:
+      - home
+      - network-bind
+      - ssh-keys
+      - ssh-public-keys
+
+parts:
+  test-env-setup:
+    plugin: dump
+    source: test_env_setup_util
+    organize:
+      '*': test_env_setup_util/
+    stage-packages:
+      - python3
+      - python3-yaml
+      - python3-jsonschema
+      - python3-paramiko
+      - python3-scp
