@@ -50,7 +50,6 @@ yaml.representer.SafeRepresenter.add_representer(str, _str_presenter)
 
 
 class SetupOperator:
-
     def __init__(self, root_path, root_yaml, session, variables={}):
         self._ssh_session = session
         self._root_path = root_path
