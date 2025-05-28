@@ -127,23 +127,32 @@
                                 ]
                             },
                             "service_raw": {
-                                "type": "string"
+                                "type": "string",
+                                "description": "the service contents, it will be write into service file"
                             },
                             "service_file_dest": {
                                 "type": "string",
                                 "default": "/etc/systemd/system"
                             },
+                            "service_name": {
+                                "type": "string",
+                                "description": "service filename"
+                            },
                             "script_file": {
-                                "type": "string"
+                                "type": "string",
+                                "description": "script filename"
                             },
                             "script_file_dest": {
-                                "type": "string"
+                                "type": "string",
+                                "description": "the directory to store script file. the script file will copy to $HOME directory, use this attribute to customized target direcotry"
                             },
-                            "service_name": {
-                                "type": "string"
+                            "script_raw": {
+                                "type": "string",
+                                "description": "the scripts, it will be write into script file"
                             },
                             "post_commands": {
-                                "type": "string"
+                                "type": "string",
+                                "description": "the instructions defined in this attribute will be launch in latest stage"
                             }
                         },
                         "required": [
@@ -154,7 +163,7 @@
                         ],
                         "dependencies": {
                             "script_file": [
-                                "script_file_dest"
+                                "script_raw"
                             ]
                         },
                         "additionalProperties": false
