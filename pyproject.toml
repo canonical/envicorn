@@ -2,10 +2,7 @@
 name = "envicorn"
 version = "0.1.0"
 description = "An utility to help users remotely configure their testing environment"
-authors = [
-    { name = "Stanley Huang", email = "60045212+tomli380576@users.noreply.github.com" },
-    { name = "Zhongning Li", email = "60045212+tomli380576@users.noreply.github.com" },
-]
+authors = [{ name = "Stanley Huang" }, { name = "Zhongning Li" }]
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
