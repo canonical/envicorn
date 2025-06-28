@@ -34,7 +34,7 @@ parts:
       - pipx # poetry is distributed with pipx
     # "pipx inject" is needed for the poetry plugin,
     # since the poetry plugin basically asks poetry to export all dependencies,
-    # then calls the python plugin do package it
+    # then calls the python plugin to package it
     # also symlink the new poetry we installed with pipx to /root/.local/bin
     override-build: |
       apt remove python3-poetry -y
