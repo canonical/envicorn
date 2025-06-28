@@ -1,0 +1,30 @@
+[project]
+name = "envicorn"
+version = "0.1.0"
+description = "An utility to help users remotely configure their testing environment"
+authors = [{ name = "Stanley Huang" }, { name = "Zhongning Li" }]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "scp (>=0.15.0,<0.16.0)",
+    "jsonschema (>=4.24.0,<5.0.0)",
+    "pyyaml (>=6.0.2,<7.0.0)",
+    "paramiko (>=3.5.1,<4.0.0)",
+    "jinja2 (>=3.1.6,<4.0.0)",
+]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+packages = [{ include = "test_env_setup_util", from = "." }]
+
+[tool.poetry.group.dev.dependencies]
+mypy = "^1.16.0"
+black = "^25.1.0"
+isort = "^6.0.1"
+types-paramiko = "^3.5.0.20250516"
+types-pyyaml = "^6.0.12.20250516"
+ruff = "^0.11.13"
+types-jsonschema = "^4.24.0.20250528"
