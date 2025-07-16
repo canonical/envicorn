@@ -2,26 +2,24 @@ name: ceqa-env-setup-tools
 type: app
 base: core22
 grade: devel
-summary: A tools to setup test environment on DUT side and server side
+summary: A tool to setup the test environment on DUT side and server side
 description: |
-  this scripts is helps QA engineer to setup the test environment on DUT,
-  and setup the iperf3 server and OBEX server on another device.
+  This program helps QA engineers setup a test environment on their DUT
+  with an iperf3 server and an OBEX server.
 version: "0.1"
-confinement: devmode
-architectures:
-  - build-on: arm64
-  - build-on: armhf
-  - build-on: amd64
+confinement: classic
 
 plugs: {}
 slots: {}
 
 apps:
   test-env-setup:
-    environment:
-      PYTHONPATH: "$SNAP/test_env_setup_util/usr/lib/python3/dist-packages"
-      LD_LIBRARY_PATH: $LD_LIBRARY_PATH:$SNAP/test_env_setup_util/usr/lib/$SNAPCRAFT_ARCH_TRIPLET
-    command: test_env_setup_util/env_setup.py
+    # The final command must have this structure for classic confinement
+    # 1. Must run `bin/python3 <python file>` and NOT directly invoking the script.
+    #   Otherwise system python is used and won't have the libs
+    # 2. Anything after the first token must have the $SNAP var in their path
+    # If there are more "apps" later, make sure their command follows this example
+    command: bin/python3 $SNAP/test_env_setup_util/env_setup.py
     plugs:
       - home
       - network-bind
@@ -29,14 +27,37 @@ apps:
       - ssh-public-keys
 
 parts:
-  test-env-setup:
+  dump-files:
+    # this just dumps all the files to test_env_setup_util
+    # NOTE: ideally we restructure the repo with a src folder so avoid fiddling with pyproject.toml
     plugin: dump
     source: test_env_setup_util
     organize:
-      '*': test_env_setup_util/
+      "*": test_env_setup_util/
+
+  run-poetry-plugin:
+    # finally run the plugin, see:
+    # https://documentation.ubuntu.com/snapcraft/stable/reference/plugins/python_plugin/
+    # https://documentation.ubuntu.com/snapcraft/stable/reference/plugins/poetry_plugin/
+    plugin: poetry
+    source: .
+    build-packages:
+      - pipx # poetry is distributed with pipx
+    # "pipx inject" is needed for the poetry plugin,
+    # since the poetry plugin basically asks poetry to export all dependencies,
+    # then calls the python plugin to package it
+    # also symlink the new poetry we installed with pipx to /root/.local/bin
+    override-build: |
+      apt remove python3-poetry -y
+      pipx install poetry
+      pipx inject poetry poetry-plugin-export
+      ln -sf /root/.local/bin/poetry /usr/bin/poetry
+      craftctl default
     stage-packages:
-      - python3
-      - python3-yaml
-      - python3-jsonschema
-      - python3-paramiko
-      - python3-scp
+      # These 3 packages are required for classic confinement
+      # do NOT use "python3.10", it's not sufficient
+      - python3.10-minimal
+      - libpython3.10-minimal
+      - libpython3.10-stdlib
+    after:
+      - dump-files
