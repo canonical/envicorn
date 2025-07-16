@@ -1,11 +1,11 @@
 name: ceqa-env-setup-tools
 type: app
-base: core24
+base: core22
 grade: devel
 summary: A tool to setup the test environment on DUT side and server side
 description: |
-  This program helps QA engineers setup the test environment on the DUT
-  and setup a iperf3 server and OBEX server on another device.
+  This program helps QA engineers setup a test environment on their DUT
+  with an iperf3 server and an OBEX server.
 version: "0.1"
 confinement: classic
 
@@ -55,9 +55,9 @@ parts:
       craftctl default
     stage-packages:
       # These 3 packages are required for classic confinement
-      # do NOT use "python3.12", it's not sufficient
-      - python3.12-minimal
-      - libpython3.12-minimal
-      - libpython3.12-stdlib
+      # do NOT use "python3.10", it's not sufficient
+      - python3.10-minimal
+      - libpython3.10-minimal
+      - libpython3.10-stdlib
     after:
       - dump-files
