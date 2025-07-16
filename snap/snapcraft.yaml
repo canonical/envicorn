@@ -30,6 +30,7 @@ parts:
       apt remove python3-poetry -y
       pipx install poetry
       pipx inject poetry poetry-plugin-export
+      ln -s /root/.local/bin/poetry /usr/bin/poetry
 
   poetry-env:
     plugin: poetry
