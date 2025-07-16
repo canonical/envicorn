@@ -52,7 +52,7 @@ parts:
       pipx install poetry
       pipx inject poetry poetry-plugin-export
       ln -sf /root/.local/bin/poetry /usr/bin/poetry
-      snapcraftctl build
+      craftctl default
     stage-packages:
       # These 3 packages are required for classic confinement
       # do NOT use "python3.12", it's not sufficient
