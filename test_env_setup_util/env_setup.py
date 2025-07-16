@@ -9,7 +9,11 @@ import sys
 import paramiko.ssh_exception
 import yaml
 
-from test_env_setup_util.libs.common import validate_file_content, _check_file, _load_file
+from test_env_setup_util.libs.common import (
+    validate_file_content,
+    _check_file,
+    _load_file,
+)
 from test_env_setup_util.libs.exceptions import ExitCode
 from test_env_setup_util.libs.operator.common import (
     ssh_command,
