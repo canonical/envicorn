@@ -1,11 +1,7 @@
 import logging
 import os
 import tempfile
-
 from pathlib import Path
-import paramiko.ssh_exception
-
-from test_env_setup_util.libs.common import _check_file
 
 
 def ssh_command(session, data):
