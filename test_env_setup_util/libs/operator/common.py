@@ -1,12 +1,8 @@
 import logging
 import os
-import paramiko
 import tempfile
-import time
 
-import paramiko.ssh_exception
-
-from libs.common import _check_file
+from pathlib import Path
 
 
 def ssh_command(session, data):
@@ -21,10 +17,11 @@ def scp_command(session, data):
 
 
 def _gen_file_and_scp(contents, filename, session):
-    with tempfile.NamedTemporaryFile(delete_on_close=False) as fp:
+    with tempfile.NamedTemporaryFile(delete=False) as fp:
         fp.write(contents)
         fp.close()
         session.launch_scp_upload(fp.name, filename)
+    Path(fp.name).unlink()
 
 
 def create_system_service(session, data):
@@ -37,10 +34,6 @@ def create_system_service(session, data):
         _gen_file_and_scp(
             data["script_raw"].encode("utf-8"), script_file, session
         )
-        with tempfile.NamedTemporaryFile(delete_on_close=False) as fp:
-            fp.write(data["script_raw"].encode("utf-8"))
-            fp.close()
-            session.launch_scp_upload(fp.name, script_file)
 
         session.launch_ssh_command(f"chmod 755 {script_file}")
         if script_file_dest:
