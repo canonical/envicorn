@@ -40,6 +40,8 @@ parts:
     # https://documentation.ubuntu.com/snapcraft/stable/reference/plugins/python_plugin/
     # https://documentation.ubuntu.com/snapcraft/stable/reference/plugins/poetry_plugin/
     plugin: poetry
+    build-attributes:
+      - enable-patchelf
     source: .
     build-packages:
       - pipx # poetry is distributed with pipx

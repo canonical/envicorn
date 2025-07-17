@@ -1,7 +1,7 @@
 import logging
 import re
 
-from libs.exceptions import SnapCommandError
+from test_env_setup_util.libs.exceptions import SnapCommandError
 
 
 def install_snap(session, snap_data):

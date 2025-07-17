@@ -2,7 +2,7 @@ import logging
 import paramiko
 
 from contextlib import contextmanager
-from libs.exceptions import SshCommandError
+from test_env_setup_util.libs.exceptions import SshCommandError
 from pathlib import Path
 from scp import SCPClient, SCPException
 
