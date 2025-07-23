@@ -9,16 +9,20 @@ import sys
 import paramiko.ssh_exception
 import yaml
 
-from libs.common import validate_file_content, _check_file, _load_file
-from libs.exceptions import ExitCode
-from libs.operator.common import (
+from test_env_setup_util.libs.common import (
+    validate_file_content,
+    _check_file,
+    _load_file,
+)
+from test_env_setup_util.libs.exceptions import ExitCode
+from test_env_setup_util.libs.operator.common import (
     ssh_command,
     scp_command,
     create_system_service,
 )
-from libs.operator.debian import install_debian
-from libs.operator.snap import install_snap
-from libs.ssh_handler import RemoteSshSession
+from test_env_setup_util.libs.operator.debian import install_debian
+from test_env_setup_util.libs.operator.snap import install_snap
+from test_env_setup_util.libs.ssh_handler import RemoteSshSession
 from pathlib import Path
 
 
