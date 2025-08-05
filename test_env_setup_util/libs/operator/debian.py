@@ -4,7 +4,7 @@ import logging
 def install_debian(session, debian_data):
     session.launch_ssh_command("sudo apt update")
     # Install debian package
-    _cmd = f"sudo apt install {debian_data['name']} -y"
+    _cmd = f"sudo apt install DEBIAN_FRONTEND=noninteractive -y {debian_data['name']}"
     if debian_data.get("revision"):
         _cmd += f"={debian_data['rivision']}"
 
