@@ -6,7 +6,7 @@ def install_debian(session, debian_data):
     # Install debian package
     _cmd = f"sudo DEBIAN_FRONTEND=noninteractive apt install -y {debian_data['name']}"
     if debian_data.get("revision"):
-        _cmd += f"={debian_data['rivision']}"
+        _cmd += f"={debian_data['revision']}"
 
     logging.info("install %s debian package", debian_data["name"])
     session.launch_ssh_command(_cmd)

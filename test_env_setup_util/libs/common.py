@@ -2,9 +2,10 @@ import json
 import logging
 import os
 import yaml
-
-from jsonschema import validate
 from pathlib import Path
+from pydantic import ValidationError
+
+from test_env_setup_util.libs.model import EnvSetup
 
 
 def _check_file(file):
@@ -31,26 +32,30 @@ def _load_file(file) -> str:
     return content
 
 
-def validate_file_content(file: str, schema_file: str) -> dict:
+def validate_file_content(file: str) -> dict:
     """
-    validate the file content with env_setup_schema and service_schema files
+    validate the file content with Pydantic models
     """
     _, ext = os.path.splitext(file)
     if ext not in [".yaml", ".yml", ".json"]:
         raise ValueError("Unsupported file type")
 
     logging.info(
-        "Validate the contents of %s file with %s schema",
+        "Validating the contents of %s file with Pydantic models",
         file,
-        schema_file,
     )
 
     content = _load_file(file)
-    with open(schema_file, "r") as fp:
-        schema_content = json.load(fp)
-    validate(content, schema_content)
+    print(content)
+    try:
+        env_setup_model = EnvSetup(**content)
+        validated_content = env_setup_model.model_dump()
+        print("\tvalidated_content: ", validated_content, "vc_end")
+    except ValidationError as e:
+        logging.error("Validation failed for %s:\n%s", file, e)
+        raise
 
-    logging.debug("the contents of %s file as following", file)
-    logging.debug(content)
+    logging.debug("\tthe contents of %s file as following", file)
+    logging.debug(validated_content)
 
-    return content
+    return validated_content
