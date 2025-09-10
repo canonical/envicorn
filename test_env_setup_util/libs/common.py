@@ -18,13 +18,13 @@ def _check_file(file):
         raise FileNotFoundError("the {} does not exist".format(file))
 
 
-def _load_file(file) -> str:
-    ext = os.path.splitext(file)
+def _load_file(file: Path) -> str:
+    ext = file.suffix
 
     with open(file, "r") as fp:
-        if ext[1] == ".json":
+        if ext == ".json":
             content = json.load(fp)
-        elif ext[1] in [".yaml", ".yml"]:
+        elif ext in [".yaml", ".yml"]:
             content = yaml.safe_load(fp)
         else:
             raise SystemExit(f"Unsupported file format: {file}")
@@ -32,12 +32,11 @@ def _load_file(file) -> str:
     return content
 
 
-def validate_file_content(file: str) -> dict:
+def validate_file_content(file: Path) -> dict:
     """
     validate the file content with Pydantic models
     """
-    _, ext = os.path.splitext(file)
-    if ext not in [".yaml", ".yml", ".json"]:
+    if file.suffix not in [".yaml", ".yml", ".json"]:
         raise ValueError("Unsupported file type")
 
     logging.info(
@@ -46,11 +45,9 @@ def validate_file_content(file: str) -> dict:
     )
 
     content = _load_file(file)
-    print(content)
     try:
-        env_setup_model = EnvSetup(**content)
+        env_setup_model = EnvSetup.model_validate(content)
         validated_content = env_setup_model.model_dump()
-        print("\tvalidated_content: ", validated_content, "vc_end")
     except ValidationError as e:
         logging.error("Validation failed for %s:\n%s", file, e)
         raise

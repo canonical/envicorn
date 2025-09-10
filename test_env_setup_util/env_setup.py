@@ -123,14 +123,12 @@ class SetupOperator:
         return self._load_env_setup_file(_check_file(template_file))
 
     def _load_env_setup_file(self, yaml_file):
-        contents = validate_file_content(yaml_file)
+        contents = validate_file_content(Path(yaml_file))
         actions = []
         action_sources = []
 
         for action in contents["actions"]:
-            print("ACT: ", action)
             new_action = self._replace_variables(action)
-            print("NEW ACT: ", new_action)
             if new_action.get("bypass_condition"):
                 try:
                     if not ast.literal_eval(action["bypass_condition"]):
@@ -175,7 +173,7 @@ class SetupOperator:
         try:
             # Re-validate after replacing variables to ensure correctness
             updated_actions = {"actions": rendered_actions}
-            validated_data = EnvSetup(**updated_actions)
+            validated_data = EnvSetup.model_validate(updated_actions)
             actions = validated_data.actions
         except ValidationError as e:
             logging.error(
@@ -278,12 +276,12 @@ def main() -> None:
     path = os.path.dirname(env_setup_file)
     root_path = path if path else os.getcwd()
 
-    variables = {}
-    if args.variables_file:
-        conf_file = _check_file(args.variables_file)
-        variables = _load_file(conf_file)
-
     if args.mode == "setup":
+        variables = {}
+        if args.variables_file:
+            conf_file = _check_file(args.variables_file)
+            variables = _load_file(conf_file)
+
         try:
             session = RemoteSshSession(
                 args.remote_ip,
@@ -304,7 +302,7 @@ def main() -> None:
             sys.exit(ExitCode.SSH_AUTH_INVALID_USERNAME_PASSWORD)
     elif args.mode == "validate":
         try:
-            validate_file_content(env_setup_file)
+            validate_file_content(Path(env_setup_file))
             logging.info("Validation successful for %s", env_setup_file)
             sys.exit(ExitCode.Success)
         except Exception:

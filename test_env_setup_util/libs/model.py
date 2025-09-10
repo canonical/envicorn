@@ -1,37 +1,43 @@
-from pydantic import BaseModel, model_validator, validator, Discriminator, Tag
-from typing import Annotated, Literal, Optional, Union
+from pydantic import (
+    BaseModel,
+    model_validator,
+    field_validator,
+    Discriminator,
+    Tag,
+)
+from typing import Annotated, Literal, Union
 
 
 class BaseAction(BaseModel):
     """Base model for all actions, used for discriminated union."""
 
-    ignore_error: Optional[bool] = False
-    bypass_condition: Optional[str] = ""
+    ignore_error: bool = False
+    bypass_condition: str | None = None
 
 
 class InstallSnapAction(BaseAction):
     action: Literal["install_snap"]
     name: str
-    track: Optional[str] = "latest"
-    risk: Optional[str] = "stable"
-    branch: Optional[str] = ""
-    revision: Optional[str] = ""
-    mode: Optional[str] = ""
-    post_commands: Optional[str] = ""
+    track: str = "latest"
+    risk: str = "stable"
+    branch: str | None = None
+    revision: str | None = None
+    mode: str = ""
+    post_commands: str | None = None
 
-    @validator("mode")
+    @field_validator("mode")
     def check_mode(cls, mode: str):
         if mode not in ["classic", "devmode", "dangerous", ""]:
             raise ValueError("mode must be one of classic, devmode, dangerous")
         return mode
 
-    @validator("revision")
+    @field_validator("revision")
     def check_revision(cls, revision: str):
         if revision and not revision.isdigit():
             raise ValueError("revision must be a digit")
         return revision
 
-    @validator("risk")
+    @field_validator("risk")
     def check_risk(cls, risk: str):
         if risk not in ["stable", "candidate", "beta", "edge"]:
             raise ValueError(
@@ -49,14 +55,14 @@ class InstallSnapAction(BaseAction):
 class InstallDebianAction(BaseAction):
     action: Literal["install_debian"]
     name: str
-    repo: Optional[str] = ""
-    revision: Optional[str] = ""
+    repo: str | None = None
+    revision: str | None = None
 
 
 class SshCommandAction(BaseAction):
     action: Literal["ssh_command"]
     command: str
-    continue_on_error: Optional[bool] = False
+    continue_on_error: bool = False
 
 
 class ScpCommandAction(BaseAction):
@@ -70,10 +76,10 @@ class CreateSystemServiceAction(BaseAction):
     service_name: str
     service_raw: str
     service_file_dest: str = "/etc/systemd/system"
-    script_raw: Optional[str] = ""
-    script_file: Optional[str] = ""
-    script_file_dest: Optional[str] = ""
-    post_commands: Optional[str] = ""
+    script_raw: str | None = None
+    script_file: str | None = None
+    script_file_dest: str | None = None
+    post_commands: str | None = None
 
     @model_validator(mode="after")
     def check_script_file_dependency(self):
