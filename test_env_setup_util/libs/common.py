@@ -47,6 +47,12 @@ def validate_file_content(file: Path) -> dict:
     content = _load_file(file)
     try:
         env_setup_model = EnvSetup.model_validate(content)
+        if "global_templates" in str(file.parent):
+            for action in env_setup_model.actions:
+                if action.bypass_condition:
+                    raise KeyError(
+                        "bypass_condition is not allowed in global_templates"
+                    )
         validated_content = env_setup_model.model_dump()
     except ValidationError as e:
         logging.error("Validation failed for %s:\n%s", file, e)

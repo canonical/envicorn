@@ -126,25 +126,28 @@ class SetupOperator:
         contents = validate_file_content(Path(yaml_file))
         actions = []
         action_sources = []
+        bypass_actions = []
 
         for action in contents["actions"]:
             new_action = self._replace_variables(action)
             if new_action.get("bypass_condition"):
                 try:
-                    if not ast.literal_eval(action["bypass_condition"]):
+                    if ast.literal_eval(new_action["bypass_condition"]):
+                        bypass_actions.append(new_action)
                         continue
                 except Exception:
                     continue
 
             if new_action["action"] == "load_template":
-                _act, _src = self._load_template_file(action["name"])
+                _act, _src, _bypass = self._load_template_file(action["name"])
                 action_sources.extend(_src)
                 actions.extend(_act)
+                bypass_actions.extend(_bypass)
             else:
                 action_sources.append(yaml_file)
                 actions.append(action)
 
-        return actions, action_sources
+        return actions, action_sources, bypass_actions
 
     def _replace_variables(self, contents):
         """
@@ -165,11 +168,11 @@ class SetupOperator:
     def run(self):
         exit_code = ExitCode.Success
         results = {}
-        raw_actions, actions_sources = self._load_env_setup_file(
+        raw_actions, actions_src, bypass_actions = self._load_env_setup_file(
             self._root_yaml
         )
-        rendered_actions = self._replace_variables(raw_actions)
 
+        rendered_actions = self._replace_variables(raw_actions)
         try:
             # Re-validate after replacing variables to ensure correctness
             updated_actions = {"actions": rendered_actions}
@@ -186,23 +189,30 @@ class SetupOperator:
                 header = f"\n{'='*30}"
                 logging.info(header)
                 logging.info(" Action %d : %s", idx, action_model.action)
-                logging.info(" source file: %s", actions_sources[idx - 1])
+                logging.info(" source file: %s", actions_src[idx - 1])
                 logging.info("=" * 30)
                 getattr(self, f"_{action_model.action}")(
                     action_model.model_dump()
                 )
                 results[idx] = "Success"
             except Exception as err:
-                if action_model.ignore_error:
-                    continue
                 logging.error(err)
                 results[idx] = "Failed"
+                if action_model.ignore_error:
+                    continue
                 exit_code = ExitCode.Action_Failed
                 break
 
         logging.info("\n\n#### Summary ####")
         for idx, result in results.items():
             logging.info("Action %d: %s", idx, result)
+
+        for action in bypass_actions:
+            logging.info(
+                "%s action been excluded. details: %s",
+                action["action"],
+                action,
+            )
 
         return exit_code
 
@@ -280,7 +290,7 @@ def main() -> None:
         variables = {}
         if args.variables_file:
             conf_file = _check_file(args.variables_file)
-            variables = _load_file(conf_file)
+            variables = _load_file(Path(conf_file))
 
         try:
             session = RemoteSshSession(
@@ -301,12 +311,9 @@ def main() -> None:
             logging.error("# Username or Password is incorrect")
             sys.exit(ExitCode.SSH_AUTH_INVALID_USERNAME_PASSWORD)
     elif args.mode == "validate":
-        try:
-            validate_file_content(Path(env_setup_file))
-            logging.info("Validation successful for %s", env_setup_file)
-            sys.exit(ExitCode.Success)
-        except Exception:
-            sys.exit(ExitCode.Action_Failed)
+        validate_file_content(Path(env_setup_file))
+        logging.info("Validation successful for %s", env_setup_file)
+        sys.exit(ExitCode.Success)
 
 
 if __name__ == "__main__":
