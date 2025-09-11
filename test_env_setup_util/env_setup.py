@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import ast
 import glob
 import jinja2
 import logging
@@ -9,12 +10,14 @@ import sys
 import paramiko.ssh_exception
 import yaml
 
+from pydantic import ValidationError
 from test_env_setup_util.libs.common import (
     validate_file_content,
     _check_file,
     _load_file,
 )
 from test_env_setup_util.libs.exceptions import ExitCode
+from test_env_setup_util.libs.model import EnvSetup
 from test_env_setup_util.libs.operator.common import (
     ssh_command,
     scp_command,
@@ -24,13 +27,6 @@ from test_env_setup_util.libs.operator.debian import install_debian
 from test_env_setup_util.libs.operator.snap import install_snap
 from test_env_setup_util.libs.ssh_handler import RemoteSshSession
 from pathlib import Path
-
-
-SCHEMA_PATH = os.environ.get(
-    "TEST_ENV_SETUP_UTIL", os.path.join(os.path.dirname(__file__), "schema")
-)
-
-ENV_SETUP_SCHEMA = os.path.join(SCHEMA_PATH, "env_setup_schema.json")
 
 
 def _str_presenter(dumper, data):
@@ -127,12 +123,20 @@ class SetupOperator:
         return self._load_env_setup_file(_check_file(template_file))
 
     def _load_env_setup_file(self, yaml_file):
-        contents = validate_file_content(yaml_file, ENV_SETUP_SCHEMA)
+        contents = validate_file_content(Path(yaml_file))
         actions = []
         action_sources = []
 
         for action in contents["actions"]:
-            if action["action"] == "load_template":
+            new_action = self._replace_variables(action)
+            if new_action.get("bypass_condition"):
+                try:
+                    if not ast.literal_eval(action["bypass_condition"]):
+                        continue
+                except Exception:
+                    continue
+
+            if new_action["action"] == "load_template":
                 _act, _src = self._load_template_file(action["name"])
                 action_sources.extend(_src)
                 actions.extend(_act)
@@ -161,19 +165,36 @@ class SetupOperator:
     def run(self):
         exit_code = ExitCode.Success
         results = {}
-        actions, actions_sources = self._load_env_setup_file(self._root_yaml)
-        actions = self._replace_variables(actions)
+        raw_actions, actions_sources = self._load_env_setup_file(
+            self._root_yaml
+        )
+        rendered_actions = self._replace_variables(raw_actions)
 
-        for idx, action in enumerate(actions, start=1):
+        try:
+            # Re-validate after replacing variables to ensure correctness
+            updated_actions = {"actions": rendered_actions}
+            validated_data = EnvSetup.model_validate(updated_actions)
+            actions = validated_data.actions
+        except ValidationError as e:
+            logging.error(
+                "Validation failed after replacing variables:\n%s", e
+            )
+            return ExitCode.Action_Failed
+
+        for idx, action_model in enumerate(actions, start=1):
             try:
                 header = f"\n{'='*30}"
                 logging.info(header)
-                logging.info(" Action %d : %s", idx, action["action"])
+                logging.info(" Action %d : %s", idx, action_model.action)
                 logging.info(" source file: %s", actions_sources[idx - 1])
                 logging.info("=" * 30)
-                getattr(self, f"_{action['action']}")(action)
+                getattr(self, f"_{action_model.action}")(
+                    action_model.model_dump()
+                )
                 results[idx] = "Success"
             except Exception as err:
+                if action_model.ignore_error:
+                    continue
                 logging.error(err)
                 results[idx] = "Failed"
                 exit_code = ExitCode.Action_Failed
@@ -255,12 +276,12 @@ def main() -> None:
     path = os.path.dirname(env_setup_file)
     root_path = path if path else os.getcwd()
 
-    variables = {}
-    if args.variables_file:
-        conf_file = _check_file(args.variables_file)
-        variables = _load_file(conf_file)
-
     if args.mode == "setup":
+        variables = {}
+        if args.variables_file:
+            conf_file = _check_file(args.variables_file)
+            variables = _load_file(conf_file)
+
         try:
             session = RemoteSshSession(
                 args.remote_ip,
@@ -279,6 +300,13 @@ def main() -> None:
         except paramiko.ssh_exception.AuthenticationException as err:
             logging.error("# Username or Password is incorrect")
             sys.exit(ExitCode.SSH_AUTH_INVALID_USERNAME_PASSWORD)
+    elif args.mode == "validate":
+        try:
+            validate_file_content(Path(env_setup_file))
+            logging.info("Validation successful for %s", env_setup_file)
+            sys.exit(ExitCode.Success)
+        except Exception:
+            sys.exit(ExitCode.Action_Failed)
 
 
 if __name__ == "__main__":
