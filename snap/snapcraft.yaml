@@ -6,11 +6,8 @@ summary: A tool to setup the test environment on DUT side and server side
 description: |
   This program helps QA engineers setup a test environment on their DUT
   with an iperf3 server and an OBEX server.
-version: "0.1"
+version: "0.3"
 confinement: classic
-
-plugs: {}
-slots: {}
 
 apps:
   test-env-setup:
@@ -20,11 +17,6 @@ apps:
     # 2. Anything after the first token must have the $SNAP var in their path
     # If there are more "apps" later, make sure their command follows this example
     command: bin/python3 $SNAP/test_env_setup_util/env_setup.py
-    plugs:
-      - home
-      - network-bind
-      - ssh-keys
-      - ssh-public-keys
 
 parts:
   dump-files:
