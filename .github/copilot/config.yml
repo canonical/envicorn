@@ -1,0 +1,22 @@
+# GitHub Copilot configuration
+version: 1
+rulesets:
+  - name: default
+    paths:
+      - "**"
+    tasks:
+      - name: "Add API standards"
+        patterns:
+          - "**/test_env_setup_util/**"
+        reviewers:
+          - "@seankingyang"
+      - name: "Implement input validation"
+        patterns:
+          - "**/test_env_setup_util/**"
+        reviewers:
+          - "@seankingyang"
+
+notifications:
+  pull_requests: true
+  issues: true
+  discussions: false
