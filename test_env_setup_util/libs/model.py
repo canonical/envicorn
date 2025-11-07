@@ -95,6 +95,19 @@ class LoadTemplateAction(BaseAction):
     name: str
 
 
+class GitCloneAction(BaseAction):
+    action: Literal["git_clone"]
+    repo: str
+    # branch, tag or commit-ish
+    ref: str | None = None
+    # shallow clone depth
+    depth: int | None = None
+    # optional subpath inside the repo to copy (defaults to repo root)
+    subpath: str | None = None
+    # optional command to run on remote after copy
+    post_commands: str | None = None
+
+
 AnyAction = Union[
     InstallSnapAction,
     InstallDebianAction,
@@ -102,6 +115,7 @@ AnyAction = Union[
     ScpCommandAction,
     CreateSystemServiceAction,
     LoadTemplateAction,
+    GitCloneAction,
 ]
 
 
@@ -119,6 +133,7 @@ ActionUnion = Annotated[
         Annotated[ScpCommandAction, Tag("scp_command")],
         Annotated[CreateSystemServiceAction, Tag("create_service")],
         Annotated[LoadTemplateAction, Tag("load_template")],
+        Annotated[GitCloneAction, Tag("git_clone")],
     ],
     Discriminator(find_tag),
 ]

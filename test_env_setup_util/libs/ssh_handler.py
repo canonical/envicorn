@@ -77,7 +77,11 @@ class RemoteSshSession:
         try:
             with self._create_client() as client:
                 with SCPClient(client.get_transport()) as scp:
-                    scp.put(src, dest)
+                    # support uploading files or whole directories
+                    if source_path.is_dir():
+                        scp.put(src, dest, recursive=True)
+                    else:
+                        scp.put(src, dest)
         except SCPException as e:
             logging.error("SCP transfer failed: %s", str(e))
             raise

@@ -1,5 +1,6 @@
 import logging
 import os
+import subprocess
 import tempfile
 from pathlib import Path
 
@@ -63,3 +64,44 @@ def create_system_service(session, data):
 
     if data.get("post_commands"):
         session.launch_ssh_command(data["post_commands"])
+
+
+def git_clone(data):
+    """Clone a git repository locally.
+
+    Expected keys in `data`:
+      - repo: git repository URL
+      - ref: optional branch/tag/commit
+      - depth: optional shallow depth
+      - subpath: optional subpath inside repo to copy
+      - post_commands: optional command to run on remote after copy
+    """
+    repo = data["repo"]
+    ref = data.get("ref")
+    depth = data.get("depth")
+    subpath = data.get("subpath")
+
+    # create a temporary directory and clone repo into it
+    tmpdir = tempfile.mkdtemp(prefix="git_clone_")
+    try:
+        clone_cmd = ["git", "clone", repo, tmpdir]
+        if depth:
+            clone_cmd = ["git", "clone", "--depth", str(depth), repo, tmpdir]
+
+        logging.info("Cloning repo %s into %s", repo, tmpdir)
+        subprocess.check_call(clone_cmd)
+
+        if ref:
+            logging.info("Checking out %s", ref)
+            subprocess.check_call(["git", "-C", tmpdir, "checkout", ref])
+
+        source_path = Path(tmpdir)
+        if subpath:
+            source_path = source_path.joinpath(subpath)
+
+        if not source_path.exists():
+            raise FileNotFoundError(f"{source_path} does not exist in repo")
+
+    except subprocess.CalledProcessError as e:
+        logging.error("Git operation failed: %s", str(e))
+        raise

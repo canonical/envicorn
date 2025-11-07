@@ -22,6 +22,7 @@ from test_env_setup_util.libs.operator.common import (
     ssh_command,
     scp_command,
     create_system_service,
+    git_clone,
 )
 from test_env_setup_util.libs.operator.debian import install_debian
 from test_env_setup_util.libs.operator.snap import install_snap
@@ -89,6 +90,12 @@ class SetupOperator:
             data["destination"],
         )
         scp_command(self._ssh_session, data)
+
+    def _git_clone(self, data):
+        logging.info(
+            "Clone git repo %s", data["repo"]
+        )
+        git_clone(data)
 
     def _lookup_template_file(self, file):
         # expand var first if there's a env variable been defined
