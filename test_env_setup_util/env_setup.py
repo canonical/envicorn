@@ -50,11 +50,12 @@ yaml.representer.SafeRepresenter.add_representer(str, _str_presenter)
 
 
 class SetupOperator:
-    def __init__(self, root_path, root_yaml, session, variables={}):
+    def __init__(self, root_path, root_yaml, session=None, variables={}, dump_file=None):
         self._ssh_session = session
         self._root_path = root_path
         self._root_yaml = root_yaml
         self._variables = variables
+        self._dump_file = dump_file
 
     def _create_service(self, data):
         """
@@ -165,6 +166,17 @@ class SetupOperator:
         new_contents = yaml.safe_load(content)
         return new_contents
 
+    def dump(self):
+        raw_actions, _, _ = self._load_env_setup_file(
+            self._root_yaml
+        )
+        rendered_actions = self._replace_variables(raw_actions)
+        dump_file = self._dump_file if self._dump_file else "dump.yaml"
+        logging.info("Dumping final yaml to %s", dump_file)
+        with open(dump_file, "w") as f:
+            yaml.dump({"actions": rendered_actions}, f)
+        return ExitCode.Success
+
     def run(self):
         exit_code = ExitCode.Success
         results = {}
@@ -253,6 +265,15 @@ def register_arguments() -> argparse.Namespace:
     )
     parser.add_argument("--debug", action="store_true", default=False)
 
+    dump_parser = sub_parser.add_parser("dump")
+    dump_parser.add_argument(
+        "-f", "--file", type=str, required=True, help="configuration file"
+    )
+    dump_parser.add_argument("-v", "--variables-file", type=str, default=None)
+    dump_parser.add_argument(
+        "-o", "--output", type=str, default=None, help="output file"
+    )
+
     return parser.parse_args()
 
 
@@ -310,6 +331,16 @@ def main() -> None:
         except paramiko.ssh_exception.AuthenticationException as err:
             logging.error("# Username or Password is incorrect")
             sys.exit(ExitCode.SSH_AUTH_INVALID_USERNAME_PASSWORD)
+    elif args.mode == "dump":
+        variables = {}
+        if args.variables_file:
+            conf_file = _check_file(args.variables_file)
+            variables = _load_file(Path(conf_file))
+
+        operator = SetupOperator(
+            root_path, env_setup_file, session=None, variables=variables, dump_file=args.output
+        )
+        sys.exit(operator.dump())
     elif args.mode == "validate":
         validate_file_content(Path(env_setup_file))
         logging.info("Validation successful for %s", env_setup_file)
