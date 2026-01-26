@@ -50,7 +50,9 @@ yaml.representer.SafeRepresenter.add_representer(str, _str_presenter)
 
 
 class SetupOperator:
-    def __init__(self, root_path, root_yaml, session=None, variables={}, dump_file=None):
+    def __init__(
+        self, root_path, root_yaml, session=None, variables={}, dump_file=None
+    ):
         self._ssh_session = session
         self._root_path = root_path
         self._root_yaml = root_yaml
@@ -167,9 +169,7 @@ class SetupOperator:
         return new_contents
 
     def dump(self):
-        raw_actions, _, _ = self._load_env_setup_file(
-            self._root_yaml
-        )
+        raw_actions, _, _ = self._load_env_setup_file(self._root_yaml)
         rendered_actions = self._replace_variables(raw_actions)
         dump_file = self._dump_file if self._dump_file else "dump.yaml"
         logging.info("Dumping final yaml to %s", dump_file)
@@ -338,7 +338,11 @@ def main() -> None:
             variables = _load_file(Path(conf_file))
 
         operator = SetupOperator(
-            root_path, env_setup_file, session=None, variables=variables, dump_file=args.output
+            root_path,
+            env_setup_file,
+            session=None,
+            variables=variables,
+            dump_file=args.output,
         )
         sys.exit(operator.dump())
     elif args.mode == "validate":
