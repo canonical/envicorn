@@ -36,7 +36,7 @@ def _load_file(file: Path) -> str:
 def _find_env_pattern(string: str) -> str:
     _match = re.search(r"^\$([a-zA-Z0-9_]+)$", string)
     if _match:
-        return _match.group(1)    
+        return _match.group(1)
     _match = re.search(r"^\$\{([a-zA-Z0-9_]+)\}$", string)
     if _match:
         return _match.group(1)
@@ -46,7 +46,7 @@ def _update_env(variables: dict) -> None:
     for key, value in variables.items():
         _env_key = _find_env_pattern(value)
         if _env_key:
-            variables[key] = os.getenv(_env_key, "") 
+            variables[key] = os.getenv(_env_key, "")
 
 
 def validate_file_content(file: Path) -> dict:
