@@ -15,6 +15,7 @@ from test_env_setup_util.libs.common import (
     validate_file_content,
     _check_file,
     _load_file,
+    _update_env,
 )
 from test_env_setup_util.libs.exceptions import ExitCode
 from test_env_setup_util.libs.model import EnvSetup
@@ -291,6 +292,7 @@ def main() -> None:
         if args.variables_file:
             conf_file = _check_file(args.variables_file)
             variables = _load_file(Path(conf_file))
+            _update_env(variables)
 
         try:
             session = RemoteSshSession(
