@@ -23,7 +23,7 @@ packages = [{ include = "test_env_setup_util", from = "." }]
 
 [tool.poetry.group.dev.dependencies]
 mypy = "^1.16.0"
-black = "^25.1.0"
+black = "^26.3.1"
 isort = "^6.0.1"
 types-paramiko = "^3.5.0.20250516"
 types-pyyaml = "^6.0.12.20250516"
