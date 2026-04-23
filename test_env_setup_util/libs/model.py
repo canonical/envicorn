@@ -24,6 +24,9 @@ class InstallSnapAction(BaseAction):
     revision: str | None = None
     mode: str = ""
     post_commands: str | None = None
+    retry_on_failure: bool = False
+    retry_count: int = 3
+    retry_delay: int = 5
 
     @field_validator("mode")
     def check_mode(cls, mode: str):
@@ -57,6 +60,9 @@ class InstallDebianAction(BaseAction):
     name: str
     repo: str | None = None
     revision: str | None = None
+    retry_on_failure: bool = False
+    retry_count: int = 3
+    retry_delay: int = 5
 
 
 class SshCommandAction(BaseAction):

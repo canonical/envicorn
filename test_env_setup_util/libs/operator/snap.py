@@ -1,5 +1,6 @@
 import logging
 import re
+import time
 
 from test_env_setup_util.libs.exceptions import SnapCommandError
 
@@ -13,8 +14,14 @@ def install_snap(session, snap_data):
     risk = snap_data.get("risk")
     branch = snap_data.get("branch")
 
+    retry_on_failure = snap_data.get("retry_on_failure", False)
+    retry_count = snap_data.get("retry_count", 3) if retry_on_failure else None
+    retry_delay = snap_data.get("retry_delay", 5) if retry_on_failure else None
+
     ret = 0
-    installed_rev, installed_tracks = get_snap_info(session, name)
+    installed_rev, installed_tracks = get_snap_info(
+        session, name, retry_on_failure, retry_count, retry_delay
+    )
     if revision == installed_rev.strip("()"):
         logging.info("%s snap has been installed with the same revision", name)
     elif f"{track}/{risk}" in installed_tracks:
@@ -37,7 +44,21 @@ def install_snap(session, snap_data):
         if snap_data.get("mode"):
             _cmd += f" --{snap_data['mode']}"
 
-        ret, _, _ = session.launch_ssh_command(_cmd)
+        if retry_on_failure:
+            for attempt in range(retry_count):
+                ret, _, _ = session.launch_ssh_command(
+                    _cmd, continue_on_error=True
+                )
+                if ret == 0:
+                    break
+                if attempt < retry_count - 1:
+                    time.sleep(retry_delay)
+                else:
+                    raise SnapCommandError(
+                        f"Failed to install snap {name} after {retry_count} retries"
+                    )
+        else:
+            ret, _, _ = session.launch_ssh_command(_cmd)
 
     if snap_data.get("post_commands") and ret == 0:
         command = snap_data["post_commands"]
@@ -46,10 +67,26 @@ def install_snap(session, snap_data):
             raise SnapCommandError(command)
 
 
-def get_snap_info(session, name):
+def get_snap_info(
+    session, name, retry_on_failure=False, retry_count=3, retry_delay=5
+):
 
     command = f"snap info {name}"
-    ret, stdout, _ = session.launch_ssh_command(command)
+    if retry_on_failure:
+        for attempt in range(retry_count):
+            ret, stdout, _ = session.launch_ssh_command(
+                command, continue_on_error=True
+            )
+            if ret == 0:
+                break
+            if attempt < retry_count - 1:
+                time.sleep(retry_delay)
+            else:
+                raise SnapCommandError(
+                    f"Failed to get snap info for {name} after {retry_count} retries"
+                )
+    else:
+        ret, stdout, _ = session.launch_ssh_command(command)
     if ret != 0:
         raise SnapCommandError(command)
 
