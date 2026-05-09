@@ -95,6 +95,51 @@ class LoadTemplateAction(BaseAction):
     name: str
 
 
+class AddAptSourceAction(BaseAction):
+    action: Literal["add_apt_source"]
+    ppa_url: str
+    auth_machine: str | None = None
+    auth_user: str | None = None
+    auth_token_var: str | None = None
+
+    @field_validator("ppa_url")
+    def check_ppa_url(cls, ppa_url: str):
+        if not ppa_url or not ppa_url.startswith("ppa:"):
+            raise ValueError(
+                f"Invalid PPA URL: {ppa_url} (must start with 'ppa:')"
+            )
+        return ppa_url
+
+    @field_validator("auth_machine")
+    def check_auth_machine(cls, auth_machine: str | None):
+        if auth_machine and not auth_machine.strip():
+            raise ValueError("auth_machine cannot be empty string")
+        return auth_machine
+
+    @field_validator("auth_user")
+    def check_auth_user(cls, auth_user: str | None):
+        if auth_user and not auth_user.strip():
+            raise ValueError("auth_user cannot be empty string")
+        return auth_user
+
+    @field_validator("auth_token_var")
+    def check_auth_token_var(cls, auth_token_var: str | None):
+        if auth_token_var and not auth_token_var.strip():
+            raise ValueError("auth_token_var cannot be empty string")
+        return auth_token_var
+
+    @model_validator(mode="after")
+    def check_auth_consistency(self):
+        has_user = bool(self.auth_user)
+        has_token_var = bool(self.auth_token_var)
+
+        if has_user != has_token_var:
+            raise ValueError(
+                "Both auth_user and auth_token_var must be provided together"
+            )
+        return self
+
+
 AnyAction = Union[
     InstallSnapAction,
     InstallDebianAction,
@@ -102,6 +147,7 @@ AnyAction = Union[
     ScpCommandAction,
     CreateSystemServiceAction,
     LoadTemplateAction,
+    AddAptSourceAction,
 ]
 
 
@@ -119,6 +165,7 @@ ActionUnion = Annotated[
         Annotated[ScpCommandAction, Tag("scp_command")],
         Annotated[CreateSystemServiceAction, Tag("create_service")],
         Annotated[LoadTemplateAction, Tag("load_template")],
+        Annotated[AddAptSourceAction, Tag("add_apt_source")],
     ],
     Discriminator(find_tag),
 ]

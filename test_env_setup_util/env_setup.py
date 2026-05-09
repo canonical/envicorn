@@ -9,6 +9,7 @@ import paramiko
 import sys
 import paramiko.ssh_exception
 import yaml
+import operator as op
 
 from pydantic import ValidationError
 from test_env_setup_util.libs.common import (
@@ -24,10 +25,66 @@ from test_env_setup_util.libs.operator.common import (
     scp_command,
     create_system_service,
 )
-from test_env_setup_util.libs.operator.debian import install_debian
+from test_env_setup_util.libs.operator.debian import install_debian, add_apt_source
 from test_env_setup_util.libs.operator.snap import install_snap
 from test_env_setup_util.libs.ssh_handler import RemoteSshSession
 from pathlib import Path
+
+
+class SafeConditionEvaluator:
+    """Safely evaluate bypass conditions without executing arbitrary code."""
+
+    ALLOWED_OPS = {
+        ast.Eq: op.eq,
+        ast.NotEq: op.ne,
+        ast.In: lambda a, b: a in b,
+        ast.NotIn: lambda a, b: a not in b,
+    }
+
+    def eval_condition(self, expr: str) -> bool:
+        """
+        Evaluate a condition string safely.
+        Supports: literals, lists, comparisons, and boolean operators.
+        Returns False if evaluation fails (fail-closed policy).
+        """
+        try:
+            tree = ast.parse(expr, mode="eval")
+            return bool(self._eval_node(tree.body))
+        except Exception:
+            logging.debug("Failed to evaluate condition: %s", expr)
+            return False
+
+    def _eval_node(self, node):
+        if isinstance(node, ast.Constant):
+            return node.value
+
+        if isinstance(node, (ast.List, ast.Tuple, ast.Set)):
+            items = [self._eval_node(e) for e in node.elts]
+            if isinstance(node, ast.List):
+                return items
+            elif isinstance(node, ast.Tuple):
+                return tuple(items)
+            else:
+                return set(items)
+
+        if isinstance(node, ast.BoolOp):
+            vals = [bool(self._eval_node(v)) for v in node.values]
+            return all(vals) if isinstance(node.op, ast.And) else any(vals)
+
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+            return not bool(self._eval_node(node.operand))
+
+        if isinstance(node, ast.Compare):
+            left = self._eval_node(node.left)
+            for op_node, comp in zip(node.ops, node.comparators):
+                right = self._eval_node(comp)
+                fn = self.ALLOWED_OPS.get(type(op_node))
+                if fn is None or not fn(left, right):
+                    return False
+                left = right
+            return True
+
+        raise ValueError(f"Disallowed AST node: {type(node).__name__}")
 
 
 def _str_presenter(dumper, data):
@@ -59,6 +116,7 @@ class SetupOperator:
         self._root_yaml = root_yaml
         self._variables = variables
         self._dump_file = dump_file
+        self._condition_evaluator = SafeConditionEvaluator()
 
     def _create_service(self, data):
         """
@@ -84,6 +142,15 @@ class SetupOperator:
         """
         logging.info("Trying to install %s debian package", data["name"])
         install_debian(self._ssh_session, data)
+
+    def _add_apt_source(self, data):
+        """
+        Add APT sources (PPAs) from Launchpad.
+        Credentials read from environment variables.
+        """
+        sources = data.get("sources", [])
+        logging.info("Adding %d APT source(s)", len(sources))
+        add_apt_source(self._ssh_session, data)
 
     def _scp_command(self, data):
         logging.info(
@@ -135,11 +202,10 @@ class SetupOperator:
         for action in contents["actions"]:
             new_action = self._replace_variables(action)
             if new_action.get("bypass_condition"):
-                try:
-                    if ast.literal_eval(new_action["bypass_condition"]):
-                        bypass_actions.append(new_action)
-                        continue
-                except Exception:
+                if self._condition_evaluator.eval_condition(
+                    new_action["bypass_condition"]
+                ):
+                    bypass_actions.append(new_action)
                     continue
 
             if new_action["action"] == "load_template":
@@ -254,7 +320,7 @@ def register_arguments() -> argparse.Namespace:
         "--password",
         type=str,
         default=None,
-        help="password for login to DUT",
+        help="password for login to DUT (prefer ENVICORN_PASSWORD env var for security)",
     )
     setup_parser.add_argument(
         "--private-key-file", type=str, help="SSH private key file"
@@ -315,11 +381,12 @@ def main() -> None:
             variables = _load_file(Path(conf_file))
             _update_env(variables)
 
+        password = args.password or os.environ.get("ENVICORN_PASSWORD")
         try:
             session = RemoteSshSession(
                 args.remote_ip,
                 args.username,
-                args.password,
+                password,
                 args.private_key_file,
             )
             session.authentication_verification()
