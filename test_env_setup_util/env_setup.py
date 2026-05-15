@@ -151,8 +151,7 @@ class SetupOperator:
         Add APT sources (PPAs) from Launchpad.
         Credentials read from environment variables.
         """
-        sources = data.get("sources", [])
-        logging.info("Adding %d APT source(s)", len(sources))
+        logging.info("Adding APT source: %s", data.get("ppa_url", ""))
         add_apt_source(self._ssh_session, data)
 
     def _scp_command(self, data):

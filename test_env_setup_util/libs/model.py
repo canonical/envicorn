@@ -1,3 +1,5 @@
+import re
+
 from pydantic import (
     BaseModel,
     model_validator,
@@ -6,6 +8,10 @@ from pydantic import (
     Tag,
 )
 from typing import Annotated, Literal, Union
+
+# PPA URLs must follow 'ppa:team/ppa-name' format with only safe characters.
+# Launchpad enforces lowercase for team and PPA names.
+_PPA_URL_PATTERN = re.compile(r"^ppa:[a-z0-9][a-z0-9.+\-]*/[a-z0-9][a-z0-9.+\-]*$")
 
 
 class BaseAction(BaseModel):
@@ -104,9 +110,11 @@ class AddAptSourceAction(BaseAction):
 
     @field_validator("ppa_url")
     def check_ppa_url(cls, ppa_url: str):
-        if not ppa_url or not ppa_url.startswith("ppa:"):
+        if not ppa_url or not _PPA_URL_PATTERN.fullmatch(ppa_url):
             raise ValueError(
-                f"Invalid PPA URL: {ppa_url} (must start with 'ppa:')"
+                f"Invalid PPA URL: {ppa_url!r} "
+                "(must match 'ppa:team/ppa-name' using only lowercase "
+                "letters, digits, hyphens, dots, and plus signs)"
             )
         return ppa_url
 
