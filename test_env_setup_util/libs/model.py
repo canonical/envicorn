@@ -11,7 +11,9 @@ from typing import Annotated, Literal, Union
 
 # PPA URLs must follow 'ppa:team/ppa-name' format with only safe characters.
 # Launchpad enforces lowercase for team and PPA names.
-_PPA_URL_PATTERN = re.compile(r"^ppa:[a-z0-9][a-z0-9.+\-]*/[a-z0-9][a-z0-9.+\-]*$")
+_PPA_URL_PATTERN = re.compile(
+    r"^ppa:[a-z0-9][a-z0-9.+\-]*/[a-z0-9][a-z0-9.+\-]*$"
+)
 
 
 class BaseAction(BaseModel):
