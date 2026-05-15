@@ -256,8 +256,6 @@ class SetupOperator:
 
         rendered_actions = self._replace_variables(raw_actions)
         try:
-            import pdb
-            pdb.set_trace()
             if "install_debian" in [a["action"] for a in rendered_actions]:
                 rendered_actions.insert(
                     0, 
