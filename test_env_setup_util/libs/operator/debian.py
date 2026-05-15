@@ -2,15 +2,15 @@ import logging
 import os
 import tempfile
 from pathlib import Path
-from test_env_setup_util.libs.operator.common import scp_command
+from shlex import quote
 
 
 def install_debian(session, debian_data):
-    session.launch_ssh_command("sudo apt update")
-    # Install debian package
-    _cmd = f"sudo DEBIAN_FRONTEND=noninteractive apt install -y {debian_data['name']}"
+    _cmd = "sudo DEBIAN_FRONTEND=noninteractive apt install -y {pkg}".format(
+        pkg=quote(debian_data['name'])
+    )
     if debian_data.get("revision"):
-        _cmd += f"={debian_data['revision']}"
+        _cmd += f"={quote(debian_data['revision'])}"
 
     logging.info("install %s debian package", debian_data["name"])
     session.launch_ssh_command(_cmd)
@@ -46,11 +46,9 @@ def add_apt_source(session, ppa_data):
     if not ppa_url:
         raise ValueError("ppa_url is required")
 
-    # Get credentials from YAML
     auth_user = ppa_data.get("auth_user")
     auth_token_var = ppa_data.get("auth_token_var")
 
-    # If credentials are specified, retrieve token from environment
     auth_token = None
     if auth_user and auth_token_var:
         auth_token = os.environ.get(auth_token_var, "").strip()
@@ -61,8 +59,7 @@ def add_apt_source(session, ppa_data):
                 ppa_url,
             )
 
-    cmd = f"sudo add-apt-repository '{ppa_url}' -y"
-
+    cmd = f"sudo add-apt-repository '{quote(ppa_url)}' -y"
     if auth_user and auth_token:
         auth_machine = ppa_data.get("auth_machine", "launchpad.net")
         auth_setup = _setup_apt_auth_via_scp(
@@ -87,7 +84,6 @@ def add_apt_source(session, ppa_data):
 
     logging.info("Adding APT source: %s", ppa_url)
     session.launch_ssh_command(cmd)
-    session.launch_ssh_command("sudo apt update")
 
 
 def _extract_ppa_id(ppa_url: str) -> str:
@@ -126,6 +122,9 @@ def _setup_apt_auth_via_scp(session, ppa_url, auth_machine, username, token):
             "Copying auth config for %s to %s", ppa_url, remote_auth_conf
         )
         session.launch_scp_upload(temp_file, auth_conf_filename)
+
+        auth_conf_filename = quote(auth_conf_filename)
+        remote_auth_conf = quote(remote_auth_conf)
 
         session.launch_ssh_command(
             f"sudo mv {auth_conf_filename} {remote_auth_conf}"

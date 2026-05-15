@@ -11,6 +11,7 @@ import paramiko.ssh_exception
 import yaml
 import operator as op
 
+from pathlib import Path
 from pydantic import ValidationError
 from test_env_setup_util.libs.common import (
     validate_file_content,
@@ -19,16 +20,18 @@ from test_env_setup_util.libs.common import (
     _update_env,
 )
 from test_env_setup_util.libs.exceptions import ExitCode
-from test_env_setup_util.libs.model import EnvSetup
+from test_env_setup_util.libs.model import EnvSetup, SshCommandAction
 from test_env_setup_util.libs.operator.common import (
     ssh_command,
     scp_command,
     create_system_service,
 )
-from test_env_setup_util.libs.operator.debian import install_debian, add_apt_source
+from test_env_setup_util.libs.operator.debian import (
+    install_debian, 
+    add_apt_source,
+)
 from test_env_setup_util.libs.operator.snap import install_snap
 from test_env_setup_util.libs.ssh_handler import RemoteSshSession
-from pathlib import Path
 
 
 class SafeConditionEvaluator:
@@ -253,6 +256,23 @@ class SetupOperator:
 
         rendered_actions = self._replace_variables(raw_actions)
         try:
+            import pdb
+            pdb.set_trace()
+            if "install_debian" in [a["action"] for a in rendered_actions]:
+                rendered_actions.insert(
+                    0, 
+                    SshCommandAction(
+                        action="ssh_command",
+                        command="sudo apt update",
+                    ).model_dump(),
+                )
+                logging.info(
+                    (
+                        "install_debian action detected, automatically "
+                        "prepend 'sudo apt update' command to "
+                        "ensure package lists are up to date"
+                    )
+                )
             # Re-validate after replacing variables to ensure correctness
             updated_actions = {"actions": rendered_actions}
             validated_data = EnvSetup.model_validate(updated_actions)
