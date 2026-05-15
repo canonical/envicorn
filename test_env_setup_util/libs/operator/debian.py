@@ -59,7 +59,7 @@ def add_apt_source(session, ppa_data):
                 ppa_url,
             )
 
-    cmd = f"sudo add-apt-repository '{quote(ppa_url)}' -y"
+    cmd = f"sudo add-apt-repository {quote(ppa_url)} -y"
     if auth_user and auth_token:
         auth_machine = ppa_data.get("auth_machine", "launchpad.net")
         auth_setup = _setup_apt_auth_via_scp(
