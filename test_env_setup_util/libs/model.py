@@ -220,6 +220,10 @@ class AddAptSourceAction(BaseAction):
         normalized = normalized.replace(" ", "").replace(":", "").upper()
         if not all(c in "0123456789ABCDEF" for c in normalized):
             raise ValueError("fingerprint must be a valid hex string")
+        if len(normalized) not in (40, 64):
+            raise ValueError(
+                "fingerprint must be a full 40- or 64-character hex fingerprint"
+            )
         return normalized
 
     @model_validator(mode="after")
