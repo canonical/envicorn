@@ -462,7 +462,7 @@ def _setup_apt_auth_via_scp(session, ppa_name, auth_machine, username, token):
         username: username for authentication
         token: authentication token/password
     """
-    auth_conf_filename = f"{ppa_name.replace('-', '_')}.conf"
+    auth_conf_filename = f"{_sanitize_source_name(ppa_name)}.conf"
     remote_auth_conf = f"/etc/apt/auth.conf.d/{auth_conf_filename}"
 
     auth_content = (
