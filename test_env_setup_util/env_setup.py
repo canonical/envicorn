@@ -27,7 +27,7 @@ from test_env_setup_util.libs.operator.common import (
     create_system_service,
 )
 from test_env_setup_util.libs.operator.debian import (
-    install_debian, 
+    install_debian,
     add_apt_source,
 )
 from test_env_setup_util.libs.operator.snap import install_snap
@@ -257,7 +257,7 @@ class SetupOperator:
         try:
             if "install_debian" in [a["action"] for a in rendered_actions]:
                 rendered_actions.insert(
-                    0, 
+                    0,
                     SshCommandAction(
                         action="ssh_command",
                         command="sudo apt update",
