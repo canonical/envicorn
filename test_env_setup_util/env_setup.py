@@ -263,6 +263,9 @@ class SetupOperator:
                         command="sudo apt update",
                     ).model_dump(),
                 )
+                actions_src.insert(
+                    0, "auto-generated: sudo apt update"
+                )
                 logging.info(
                     (
                         "install_debian action detected, automatically "
