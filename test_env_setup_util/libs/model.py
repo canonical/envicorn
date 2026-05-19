@@ -29,6 +29,8 @@ def _ensure_non_empty_str(value: str, field_name: str) -> str:
     stripped = value.strip()
     if not stripped:
         raise ValueError(f"{field_name} cannot be empty string")
+    if "\r" in stripped or "\n" in stripped:
+        raise ValueError(f"{field_name} cannot contain carriage returns or newlines")
     return stripped
 
 
