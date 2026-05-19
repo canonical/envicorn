@@ -50,7 +50,7 @@ def install_snap(session, snap_data):
 
 def get_snap_info(session, name):
 
-    command = f"snap info {name}"
+    command = f"snap info {quote(name)}"
     ret, stdout, _ = session.launch_ssh_command(command)
     if ret != 0:
         raise SnapCommandError(command)
