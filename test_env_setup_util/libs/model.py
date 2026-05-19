@@ -248,9 +248,9 @@ class AddAptSourceAction(BaseAction):
         has_key_server = bool(self.key_server)
         has_fingerprint = bool(self.fingerprint)
 
-        if has_key_server != has_fingerprint:
+        if has_key_server and not has_fingerprint:
             raise ValueError(
-                "Both key_server and fingerprint must be provided together"
+                "fingerprint must be provided when key_server is set"
             )
         return self
 
