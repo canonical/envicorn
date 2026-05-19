@@ -127,9 +127,13 @@ def add_apt_source(session, ppa_data):
         if gpg_key_path:
             deb822_payload["signed_by"] = gpg_key_path
         else:
-            logging.warning(
-                "Failed to setup GPG key for %s, continuing without signed packages",
+            logging.error(
+                "Failed to setup GPG key for %s with fingerprint %s; aborting source configuration",
                 ppa_name,
+                fingerprint,
+            )
+            raise RuntimeError(
+                f"Failed to configure required GPG key for apt source '{ppa_name}'"
             )
 
     if auth_user and auth_token:
