@@ -1,6 +1,7 @@
 import logging
 import re
 
+from shlex import quote
 from test_env_setup_util.libs.exceptions import SnapCommandError
 
 
@@ -23,16 +24,17 @@ def install_snap(session, snap_data):
         )
     else:
         if installed_rev:
-            _cmd = f"sudo snap refresh {name}"
+            _cmd = f"sudo snap refresh {quote(name)}"
         else:
-            _cmd = f"sudo snap install {name}"
+            _cmd = f"sudo snap install {quote(name)}"
 
         if revision:
-            _cmd += f" --revision={revision}"
+            _cmd += f" --revision={quote(revision)}"
         else:
-            _cmd += f" --channel={track}/{risk}"
+            _arg = f"{track}/{risk}"
             if branch:
-                _cmd += f"/{branch}"
+                _arg += f"/{branch}"
+            _cmd += f" --channel={quote(_arg)}"
 
         if snap_data.get("mode"):
             _cmd += f" --{snap_data['mode']}"
@@ -48,7 +50,7 @@ def install_snap(session, snap_data):
 
 def get_snap_info(session, name):
 
-    command = f"snap info {name}"
+    command = f"snap info {quote(name)}"
     ret, stdout, _ = session.launch_ssh_command(command)
     if ret != 0:
         raise SnapCommandError(command)
