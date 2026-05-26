@@ -6,6 +6,9 @@ from pathlib import Path
 from shlex import quote
 from urllib.parse import urlsplit
 
+from libs.operator.common import run_command
+from libs.common import _find_env_pattern, _get_env
+
 
 _PPA_URL_PATTERN = re.compile(
     r"^ppa:([a-z0-9][a-z0-9.+\-]*)/([a-z0-9][a-z0-9.+\-]*)$"
@@ -98,17 +101,20 @@ def add_apt_source(session, ppa_data):
         raise ValueError("Either ppa_url or deb822 fields are required")
 
     auth_user = ppa_data.get("auth_user")
-    auth_token_var = ppa_data.get("auth_token_var")
+    auth_token_key = ppa_data.get("auth_token")
 
     auth_token = None
-    if auth_user and auth_token_var:
-        auth_token = os.environ.get(auth_token_var, "").strip()
-        if not auth_token:
-            logging.warning(
-                "Environment variable '%s' not found for %s",
-                auth_token_var,
-                ppa_name,
-            )
+    if auth_user and auth_token_key:
+        if _find_env_pattern(auth_token_key):
+            auth_token = _get_env(_find_env_pattern(auth_token_key))
+            if not auth_token:
+                logging.warning(
+                    "Environment variable '%s' not found for %s",
+                    auth_token_key,
+                    ppa_name,
+                )
+        else:
+            auth_token = auth_token_key.strip()
 
     if ppa_url:
         deb822_payload = _build_deb822_from_ppa_url(ppa_url, suites)
@@ -119,6 +125,8 @@ def add_apt_source(session, ppa_data):
 
     # Setup GPG key if fingerprint is provided
     fingerprint = ppa_data.get("fingerprint")
+    if _find_env_pattern(fingerprint):
+            fingerprint = _get_env(fingerprint)
     key_server = ppa_data.get("key_server") or "keyserver.ubuntu.com"
     if fingerprint:
         gpg_key_path = _setup_gpg_key_via_scp(
@@ -128,15 +136,14 @@ def add_apt_source(session, ppa_data):
             deb822_payload["signed_by"] = gpg_key_path
         else:
             logging.error(
-                "Failed to setup GPG key for %s with fingerprint %s; aborting source configuration",
-                ppa_name,
-                fingerprint,
+                "Failed to setup GPG key for %s with fingerprint", ppa_name,
             )
+            logging.error("aborting source configuration ...")
             raise RuntimeError(
                 f"Failed to configure required GPG key for apt source '{ppa_name}'"
             )
 
-    if auth_user and auth_token:
+    if auth_user and auth_token_key:
         # Auto-derive auth_machine from uris if not explicitly provided
         auth_machine = ppa_data.get("auth_machine")
         if not auth_machine:
@@ -149,17 +156,16 @@ def add_apt_source(session, ppa_data):
                 "Failed to setup auth for %s, continuing without auth",
                 ppa_name,
             )
+    elif auth_user or auth_token_key:
+        logging.debug(
+            "Auth credentials incomplete for %s (missing user or token)",
+            ppa_name,
+        )
     else:
-        if auth_user or auth_token_var:
-            logging.debug(
-                "Auth credentials incomplete for %s (missing user or token)",
-                ppa_name,
-            )
-        else:
-            logging.debug(
-                "No credentials configured for %s (optional for public PPAs)",
-                ppa_name,
-            )
+        logging.debug(
+            "No credentials configured for %s (optional for public PPAs)",
+            ppa_name,
+        )
 
     source_setup = _setup_deb822_source_via_scp(
         session, ppa_name, _render_deb822_source(deb822_payload)
@@ -420,19 +426,25 @@ def _setup_gpg_key_via_scp(session, ppa_name, fingerprint, key_server):
             key_server,
             ppa_name,
         )
-        session.launch_ssh_command(
+        run_command(
             f"gpg --keyserver {quote(key_server)} --recv-keys {quote(fingerprint)}"
         )
 
-        # Export key to temporary file on remote system
-        logging.info("Exporting GPG key to %s", remote_key_path)
-        session.launch_ssh_command(
-            f"gpg --export --armor {quote(fingerprint)} > /tmp/{quote(key_file)}"
-        )
+        # Export key to temporary file
+        logging.info("Exporting GPG key to %s", key_file)
+        with tempfile.NamedTemporaryFile(
+            mode="w", delete=False, suffix=".sources"
+        ) as fp:
+            key_file = fp.name
+            run_command(
+                f"gpg --export --armor {quote(fingerprint)} > {key_file}"
+            )
 
         # Move to trusted.gpg.d with proper permissions
+        session.launch_scp_upload(key_file, key_file)
+        Path(key_file).unlink()
         session.launch_ssh_command(
-            f"sudo mv /tmp/{quote(key_file)} {quote(remote_key_path)}"
+            f"sudo mv {quote(key_file)} {quote(remote_key_path)}"
         )
         session.launch_ssh_command(f"sudo chmod 644 {quote(remote_key_path)}")
 

@@ -1,5 +1,6 @@
 import logging
 import os
+import subprocess
 import tempfile
 from pathlib import Path
 
@@ -63,3 +64,12 @@ def create_system_service(session, data):
 
     if data.get("post_commands"):
         session.launch_ssh_command(data["post_commands"])
+
+
+def run_command(command, shell=False, check=True):
+    if not shell:
+        command = command.split()
+    try:
+        subprocess.run(command, shell=shell, check=check)
+    except subprocess.CalledProcessError as e:
+        raise SystemExit(f"Error: {e}")

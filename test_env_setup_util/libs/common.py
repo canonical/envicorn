@@ -42,11 +42,19 @@ def _find_env_pattern(string: str) -> str:
         return _match.group(1)
 
 
-def _update_env(variables: dict) -> None:
+def _get_env(_env_key:str) -> None:
+    if not os.getenv(_env_key):
+        logging.warning(
+            "Environment variable %s is not set, using empty string instead",
+            _env_key,
+        )
+    return os.getenv(_env_key, "")
+
+
+def _update_variables_with_env(variables: dict) -> None:
     for key, value in variables.items():
-        _env_key = _find_env_pattern(value)
-        if _env_key:
-            variables[key] = os.getenv(_env_key, "")
+        if isinstance(value, str) and _find_env_pattern(value):
+            variables[key] = _get_env(_find_env_pattern(value))
 
 
 def validate_file_content(file: Path) -> dict:
