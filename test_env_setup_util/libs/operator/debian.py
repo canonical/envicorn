@@ -6,8 +6,8 @@ from pathlib import Path
 from shlex import quote
 from urllib.parse import urlsplit
 
-from libs.operator.common import run_command
-from libs.common import _find_env_pattern, _get_env
+from test_env_setup_util.libs.operator.common import run_command
+from test_env_setup_util.libs.common import _find_env_pattern, _get_env
 
 
 _PPA_URL_PATTERN = re.compile(
