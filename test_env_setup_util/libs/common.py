@@ -48,6 +48,7 @@ def _get_env(_env_key:str) -> None:
             "Environment variable %s is not set, using empty string instead",
             _env_key,
         )
+    logging.info("Environment variable %s value: %s", _env_key, os.getenv(_env_key))
     return os.getenv(_env_key, "")
 
 
