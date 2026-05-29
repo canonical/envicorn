@@ -17,7 +17,7 @@ from test_env_setup_util.libs.common import (
     validate_file_content,
     _check_file,
     _load_file,
-    _update_env,
+    _update_variables_with_env,
 )
 from test_env_setup_util.libs.exceptions import ExitCode
 from test_env_setup_util.libs.model import EnvSetup, SshCommandAction
@@ -397,7 +397,8 @@ def main() -> None:
         if args.variables_file:
             conf_file = _check_file(args.variables_file)
             variables = _load_file(Path(conf_file))
-            _update_env(variables)
+        # update variables
+        _update_variables_with_env(variables)
 
         password = args.password or os.environ.get("ENVICORN_PASSWORD")
         try:

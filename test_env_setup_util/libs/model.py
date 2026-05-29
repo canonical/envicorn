@@ -147,7 +147,7 @@ class AddAptSourceAction(BaseAction):
     enabled: bool | None = None
     auth_machine: str | None = None
     auth_user: str | None = None
-    auth_token_var: str | None = None
+    auth_token: str | None = None
     key_server: str | None = None
     fingerprint: str | None = None
 
@@ -203,11 +203,11 @@ class AddAptSourceAction(BaseAction):
             return auth_user
         return _ensure_non_empty_str(auth_user, "auth_user")
 
-    @field_validator("auth_token_var")
-    def check_auth_token_var(cls, auth_token_var: str | None):
-        if auth_token_var is None:
-            return auth_token_var
-        return _ensure_non_empty_str(auth_token_var, "auth_token_var")
+    @field_validator("auth_token")
+    def check_auth_token(cls, auth_token: str | None):
+        if auth_token is None:
+            return auth_token
+        return _ensure_non_empty_str(auth_token, "auth_token")
 
     @field_validator("key_server")
     def check_key_server(cls, key_server: str | None):
@@ -222,12 +222,6 @@ class AddAptSourceAction(BaseAction):
         normalized = _ensure_non_empty_str(fingerprint, "fingerprint")
         # Fingerprints are hex strings, remove common formatting
         normalized = normalized.replace(" ", "").replace(":", "").upper()
-        if not all(c in "0123456789ABCDEF" for c in normalized):
-            raise ValueError("fingerprint must be a valid hex string")
-        if len(normalized) not in (40, 64):
-            raise ValueError(
-                "fingerprint must be a full 40- or 64-character hex fingerprint"
-            )
         return normalized
 
     @model_validator(mode="after")
@@ -246,11 +240,11 @@ class AddAptSourceAction(BaseAction):
             raise ValueError("suites is required when ppa_url is provided")
 
         has_user = bool(self.auth_user)
-        has_token_var = bool(self.auth_token_var)
+        has_token = bool(self.auth_token)
 
-        if has_user != has_token_var:
+        if has_user != has_token:
             raise ValueError(
-                "Both auth_user and auth_token_var must be provided together"
+                "Both auth_user and auth_token must be provided together"
             )
 
         has_key_server = bool(self.key_server)
