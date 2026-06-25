@@ -135,7 +135,8 @@ def add_apt_source(session, ppa_data):
             deb822_payload["signed_by"] = gpg_key_path
         else:
             logging.error(
-                "Failed to setup GPG key for %s with fingerprint", ppa_name,
+                "Failed to setup GPG key for %s with fingerprint",
+                ppa_name,
             )
             logging.error("aborting source configuration ...")
             raise RuntimeError(
@@ -303,7 +304,9 @@ def _render_deb822_source(deb822_payload):
     # Require Signed-By unless the source is explicitly trusted (trusted: yes).
     # Do this before rendering to give a clear error rather than relying on
     # apt notice output, which is suppressed in non-TTY SSH sessions.
-    if not deb822_payload.get("signed_by") and not deb822_payload.get("trusted"):
+    if not deb822_payload.get("signed_by") and not deb822_payload.get(
+        "trusted"
+    ):
         raise ValueError(
             "deb822.signed_by is required; provide fingerprint + key_server, "
             "or set trusted: yes to explicitly opt out of signature verification"

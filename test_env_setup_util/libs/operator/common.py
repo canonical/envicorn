@@ -69,17 +69,14 @@ def create_system_service(session, data):
 def run_command(command, shell=False, check=True):
     if not shell and isinstance(command, str):
         command = command.split()
-        
+
     try:
         result = subprocess.run(
-            command, 
-            shell=shell, 
-            check=check, 
-            capture_output=True, 
-            text=True
+            command, shell=shell, check=check, capture_output=True, text=True
         )
         return result.stdout.strip()
-        
-    except subprocess.CalledProcessError as e:
-        raise SystemExit(f"Error executing command: {e}\nDetails: {e.stderr.strip()}")
 
+    except subprocess.CalledProcessError as e:
+        raise SystemExit(
+            f"Error executing command: {e}\nDetails: {e.stderr.strip()}"
+        )

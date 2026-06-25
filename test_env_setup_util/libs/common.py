@@ -42,13 +42,15 @@ def _find_env_pattern(string: str) -> str:
         return _match.group(1)
 
 
-def _get_env(_env_key:str) -> None:
+def _get_env(_env_key: str) -> None:
     if not os.getenv(_env_key):
         logging.warning(
             "Environment variable %s is not set, using empty string instead",
             _env_key,
         )
-    logging.info("Environment variable %s value: %s", _env_key, os.getenv(_env_key))
+    logging.info(
+        "Environment variable %s value: %s", _env_key, os.getenv(_env_key)
+    )
     return os.getenv(_env_key, "")
 
 
