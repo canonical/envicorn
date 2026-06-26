@@ -60,12 +60,11 @@ class RemoteSshSession:
             logging.info("> response: \n%s", log_stdout)
             logging.info("> exit code: %s", exit_code)
 
-            if continue_on_error:
-                logging.info("> %s", log_stderr)
-            else:
-                if exit_code not in accepted_exit_codes:
-                    logging.error("> %s", log_stderr)
-                    raise SshCommandError(command)
+            if log_stderr:
+                logging.info("> stderr: \n%s", log_stderr)
+
+            if exit_code not in accepted_exit_codes and not continue_on_error:
+                raise SshCommandError(command)
 
         return exit_code, log_stdout, log_stderr
 

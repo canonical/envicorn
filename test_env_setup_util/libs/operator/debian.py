@@ -1,10 +1,12 @@
 import logging
-import os
 import re
 import tempfile
 from pathlib import Path
 from shlex import quote
 from urllib.parse import urlsplit
+
+from test_env_setup_util.libs.operator.common import run_command
+from test_env_setup_util.libs.common import _find_env_pattern, _get_env
 
 
 _PPA_URL_PATTERN = re.compile(
@@ -98,17 +100,20 @@ def add_apt_source(session, ppa_data):
         raise ValueError("Either ppa_url or deb822 fields are required")
 
     auth_user = ppa_data.get("auth_user")
-    auth_token_var = ppa_data.get("auth_token_var")
+    auth_token_key = ppa_data.get("auth_token")
 
     auth_token = None
-    if auth_user and auth_token_var:
-        auth_token = os.environ.get(auth_token_var, "").strip()
-        if not auth_token:
-            logging.warning(
-                "Environment variable '%s' not found for %s",
-                auth_token_var,
-                ppa_name,
-            )
+    if auth_user and auth_token_key:
+        if _find_env_pattern(auth_token_key):
+            auth_token = _get_env(_find_env_pattern(auth_token_key))
+            if not auth_token:
+                logging.warning(
+                    "Environment variable '%s' not found for %s",
+                    auth_token_key,
+                    ppa_name,
+                )
+        else:
+            auth_token = auth_token_key.strip()
 
     if ppa_url:
         deb822_payload = _build_deb822_from_ppa_url(ppa_url, suites)
@@ -119,6 +124,8 @@ def add_apt_source(session, ppa_data):
 
     # Setup GPG key if fingerprint is provided
     fingerprint = ppa_data.get("fingerprint")
+    if _find_env_pattern(fingerprint):
+        fingerprint = _get_env(_find_env_pattern(fingerprint))
     key_server = ppa_data.get("key_server") or "keyserver.ubuntu.com"
     if fingerprint:
         gpg_key_path = _setup_gpg_key_via_scp(
@@ -128,15 +135,15 @@ def add_apt_source(session, ppa_data):
             deb822_payload["signed_by"] = gpg_key_path
         else:
             logging.error(
-                "Failed to setup GPG key for %s with fingerprint %s; aborting source configuration",
+                "Failed to setup GPG key for %s with fingerprint",
                 ppa_name,
-                fingerprint,
             )
+            logging.error("aborting source configuration ...")
             raise RuntimeError(
                 f"Failed to configure required GPG key for apt source '{ppa_name}'"
             )
 
-    if auth_user and auth_token:
+    if auth_user and auth_token_key:
         # Auto-derive auth_machine from uris if not explicitly provided
         auth_machine = ppa_data.get("auth_machine")
         if not auth_machine:
@@ -149,17 +156,16 @@ def add_apt_source(session, ppa_data):
                 "Failed to setup auth for %s, continuing without auth",
                 ppa_name,
             )
+    elif auth_user or auth_token_key:
+        logging.debug(
+            "Auth credentials incomplete for %s (missing user or token)",
+            ppa_name,
+        )
     else:
-        if auth_user or auth_token_var:
-            logging.debug(
-                "Auth credentials incomplete for %s (missing user or token)",
-                ppa_name,
-            )
-        else:
-            logging.debug(
-                "No credentials configured for %s (optional for public PPAs)",
-                ppa_name,
-            )
+        logging.debug(
+            "No credentials configured for %s (optional for public PPAs)",
+            ppa_name,
+        )
 
     source_setup = _setup_deb822_source_via_scp(
         session, ppa_name, _render_deb822_source(deb822_payload)
@@ -294,6 +300,17 @@ def _render_deb822_source(deb822_payload):
 
     required_fields = {"types", "uris", "suites", "components"}
     lines = []
+
+    # Require Signed-By unless the source is explicitly trusted (trusted: yes).
+    # Do this before rendering to give a clear error rather than relying on
+    # apt notice output, which is suppressed in non-TTY SSH sessions.
+    if not deb822_payload.get("signed_by") and not deb822_payload.get(
+        "trusted"
+    ):
+        raise ValueError(
+            "deb822.signed_by is required; provide fingerprint + key_server, "
+            "or set trusted: yes to explicitly opt out of signature verification"
+        )
     for key, deb822_key in field_map:
         value = deb822_payload.get(key)
         if value is None:
@@ -363,21 +380,52 @@ def _validate_apt_source_with_update(session, ppa_name):
     Validate a newly added Deb822 source by running apt update only for that source.
 
     This avoids false failures caused by unrelated repository issues.
+    Uses 'apt' and inspects output for GPG/signing warnings that may not
+    produce a failing exit code.
     """
     source_filename = f"{_sanitize_source_name(ppa_name)}.sources"
     target_source = quote(f"sources.list.d/{source_filename}")
     cmd = (
-        "sudo DEBIAN_FRONTEND=noninteractive apt-get update "
+        "sudo DEBIAN_FRONTEND=noninteractive apt update "
         f"-o Dir::Etc::sourcelist={target_source} "
         "-o Dir::Etc::sourceparts='-' "
-        "-o APT::Get::List-Cleanup='0'"
+        "-o APT::Get::List-Cleanup='0' "
+        "2>&1"
     )
 
     try:
         logging.info(
             "Validating apt source for %s via targeted apt update", ppa_name
         )
-        session.launch_ssh_command(cmd)
+        result = session.launch_ssh_command(cmd)
+
+        # Some apt warnings about missing/invalid signing keys can appear
+        # without a hard command failure, so treat them as validation errors.
+        output_chunks = []
+        if isinstance(result, tuple):
+            for chunk in result:
+                if isinstance(chunk, str):
+                    output_chunks.append(chunk)
+        elif isinstance(result, str):
+            output_chunks.append(result)
+
+        output_text = "\n".join(output_chunks)
+        output_text_lower = output_text.lower()
+        gpg_error_markers = [
+            "no_pubkey",
+            "expkeysig",
+            "badsig",
+            "the following signatures couldn't be verified",
+            "is not signed",
+            "missing signed-by",
+        ]
+        if any(marker in output_text_lower for marker in gpg_error_markers):
+            logging.error(
+                "APT source validation failed for %s: missing or invalid GPG metadata detected",
+                ppa_name,
+            )
+            return False
+
         return True
     except Exception as e:
         logging.error(
@@ -424,15 +472,15 @@ def _setup_gpg_key_via_scp(session, ppa_name, fingerprint, key_server):
             f"gpg --keyserver {quote(key_server)} --recv-keys {quote(fingerprint)}"
         )
 
-        # Export key to temporary file on remote system
-        logging.info("Exporting GPG key to %s", remote_key_path)
+        # Export key to temporary location on remote system
+        temp_key_file = f"/tmp/{key_file}"
         session.launch_ssh_command(
-            f"gpg --export --armor {quote(fingerprint)} > /tmp/{quote(key_file)}"
+            f"gpg --export --armor {quote(fingerprint)} > {temp_key_file}"
         )
 
         # Move to trusted.gpg.d with proper permissions
         session.launch_ssh_command(
-            f"sudo mv /tmp/{quote(key_file)} {quote(remote_key_path)}"
+            f"sudo mv {quote(temp_key_file)} {quote(remote_key_path)}"
         )
         session.launch_ssh_command(f"sudo chmod 644 {quote(remote_key_path)}")
 
