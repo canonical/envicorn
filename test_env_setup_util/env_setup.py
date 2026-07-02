@@ -7,10 +7,12 @@ import logging
 import os
 import paramiko
 import sys
+import time
 import paramiko.ssh_exception
 import yaml
 import operator as op
 
+from contextlib import contextmanager
 from pathlib import Path
 from pydantic import ValidationError
 from test_env_setup_util.libs.common import (
@@ -237,6 +239,30 @@ class SetupOperator:
         new_contents = yaml.safe_load(content)
         return new_contents
 
+    def _resolve_execution_counts(self):
+        value = self._variables.get("EXECUTION_COUNTS", 3)
+        try:
+            execution_counts = int(value)
+        except (TypeError, ValueError):
+            raise ValueError(
+                "EXECUTION_COUNTS in variables must be an integer"
+            )
+        if execution_counts < 0:
+            raise ValueError("EXECUTION_COUNTS in variables must be >= 0")
+        return execution_counts
+
+    def _resolve_retry_delay_seconds(self):
+        value = self._variables.get("RETRY_DELAY_SECONDS", 1)
+        try:
+            retry_delay_seconds = float(value)
+        except (TypeError, ValueError):
+            raise ValueError(
+                "RETRY_DELAY_SECONDS in variables must be a number"
+            )
+        if retry_delay_seconds < 0:
+            raise ValueError("RETRY_DELAY_SECONDS in variables must be >= 0")
+        return retry_delay_seconds
+
     def dump(self):
         raw_actions, _, _ = self._load_env_setup_file(self._root_yaml)
         rendered_actions = self._replace_variables(raw_actions)
@@ -246,11 +272,67 @@ class SetupOperator:
             yaml.dump({"actions": rendered_actions}, f)
         return ExitCode.Success
 
+    @contextmanager
+    def _silence_retry_attempt_logs(self, enabled=False):
+        if not enabled:
+            yield
+            return
+
+        logger = logging.getLogger()
+        original_level = logger.level
+        logger.setLevel(logging.CRITICAL)
+        try:
+            yield
+        finally:
+            logger.setLevel(original_level)
+
+    def _do_action(
+        self, action_model, execution_counts=3, retry_delay_seconds=1
+    ):
+        # Retry transient network failures before marking action failed.
+        action_handler = getattr(self, f"_{action_model.action}")
+        action_payload = action_model.model_dump()
+        logger = logging.getLogger()
+        for attempt in range(1, execution_counts + 1):
+            is_last_attempt = attempt >= execution_counts
+            suppress_attempt_logs = (
+                not logger.isEnabledFor(logging.DEBUG) and not is_last_attempt
+            )
+            try:
+                with self._silence_retry_attempt_logs(suppress_attempt_logs):
+                    action_handler(action_payload)
+                return
+            except Exception as err:
+                if is_last_attempt:
+                    raise
+                if logger.isEnabledFor(logging.DEBUG):
+                    logging.debug(
+                        (
+                            "Action %s failed on attempt %d/%d: %s. "
+                            "Retrying in %.2fs"
+                        ),
+                        action_model.action,
+                        attempt,
+                        execution_counts,
+                        err,
+                        retry_delay_seconds,
+                        exc_info=True,
+                    )
+            time.sleep(retry_delay_seconds)
+
     def run(self):
         exit_code = ExitCode.Success
         results = {}
         raw_actions, actions_src, bypass_actions = self._load_env_setup_file(
             self._root_yaml
+        )
+
+        execution_counts = self._resolve_execution_counts()
+        retry_delay_seconds = self._resolve_retry_delay_seconds()
+        logging.info(
+            "Action execution policy: executions=%s, retry_delay=%.2fs",
+            execution_counts,
+            retry_delay_seconds,
         )
 
         rendered_actions = self._replace_variables(raw_actions)
@@ -288,12 +370,18 @@ class SetupOperator:
                 logging.info(" Action %d : %s", idx, action_model.action)
                 logging.info(" source file: %s", actions_src[idx - 1])
                 logging.info("=" * 30)
-                getattr(self, f"_{action_model.action}")(
-                    action_model.model_dump()
+                self._do_action(
+                    action_model, execution_counts, retry_delay_seconds
                 )
                 results[idx] = "Success"
             except Exception as err:
-                logging.error(err)
+                logging.error(
+                    "Action %d (%s) failed after %d execution(s): %s",
+                    idx,
+                    action_model.action,
+                    execution_counts,
+                    err,
+                )
                 results[idx] = "Failed"
                 if action_model.ignore_error:
                     continue
@@ -338,7 +426,10 @@ def register_arguments() -> argparse.Namespace:
         "--password",
         type=str,
         default=None,
-        help="password for login to DUT (prefer ENVICORN_PASSWORD env var for security)",
+        help=(
+            "password for login to DUT "
+            "(prefer ENVICORN_PASSWORD env var for security)"
+        ),
     )
     setup_parser.add_argument(
         "--private-key-file", type=str, help="SSH private key file"
@@ -413,10 +504,10 @@ def main() -> None:
                 root_path, env_setup_file, session, variables
             )
             sys.exit(operator.run())
-        except paramiko.ssh_exception.PasswordRequiredException as err:
+        except paramiko.ssh_exception.PasswordRequiredException:
             logging.error("# password and passphrase is needed")
             sys.exit(ExitCode.SSH_AUTH_REQUIRED_PASSWORD_PASSPHRASE)
-        except paramiko.ssh_exception.AuthenticationException as err:
+        except paramiko.ssh_exception.AuthenticationException:
             logging.error("# Username or Password is incorrect")
             sys.exit(ExitCode.SSH_AUTH_INVALID_USERNAME_PASSWORD)
     elif args.mode == "dump":
