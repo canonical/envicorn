@@ -243,24 +243,35 @@ class SetupOperator:
         value = self._variables.get("EXECUTION_COUNTS", 3)
         try:
             execution_counts = int(value)
+            if execution_counts < 0:
+                logging.warning(
+                    "EXECUTION_COUNTS must be >= 0, defaulting to 3"
+                )
+                execution_counts = 3
         except (TypeError, ValueError):
-            raise ValueError(
-                "EXECUTION_COUNTS in variables must be an integer"
+            logging.warning(
+                "EXECUTION_COUNTS must be an integer, defaulting to 3"
             )
-        if execution_counts < 0:
-            raise ValueError("EXECUTION_COUNTS in variables must be >= 0")
+            execution_counts = 3
+
         return execution_counts
 
     def _resolve_retry_delay_seconds(self):
         value = self._variables.get("RETRY_DELAY_SECONDS", 1)
         try:
             retry_delay_seconds = float(value)
+            if retry_delay_seconds < 0:
+                logging.warning(
+                    "RETRY_DELAY_SECONDS must be >= 0, defaulting to 1"
+                )
+                retry_delay_seconds = 1
         except (TypeError, ValueError):
-            raise ValueError(
-                "RETRY_DELAY_SECONDS in variables must be a number"
+            logging.warning(
+                "RETRY_DELAY_SECONDS must be a number, defaulting to 1"
             )
-        if retry_delay_seconds < 0:
-            raise ValueError("RETRY_DELAY_SECONDS in variables must be >= 0")
+            retry_delay_seconds = 1
+
+
         return retry_delay_seconds
 
     def dump(self):
