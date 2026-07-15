@@ -271,7 +271,6 @@ class SetupOperator:
             )
             retry_delay_seconds = 1
 
-
         return retry_delay_seconds
 
     def dump(self):
