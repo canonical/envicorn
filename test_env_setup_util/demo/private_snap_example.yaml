@@ -1,0 +1,77 @@
+# Example configuration demonstrating private snap installation
+# This shows the new store_auth and store_id fields for installing private snaps
+
+actions:
+  # Example 1: Public snap installation (existing functionality)
+  - action: install_snap
+    name: test-snapd-tools-core22
+    track: latest
+    risk: edge
+    mode: devmode
+    post_commands: snap list
+
+  # Example 2: Private snap with explicit store credentials
+  # The store_auth is typically provided via environment variable
+  - action: install_snap
+    name: my-private-snap
+    track: 22
+    risk: edge
+    mode: devmode
+    store_auth: "{{ SNAP_STORE_AUTH }}"  # Base64 encoded credentials from 'snapcraft export-login'
+    store_id: my-custom-store-id          # Optional: custom store ID
+
+  # Example 3: Private snap with auto-detected store ID
+  # If store_id is not provided, it will be automatically detected from the device
+  # using 'snap model --assertion'
+  - action: install_snap
+    name: checkbox-frontend-private
+    track: 22
+    risk: stable
+    store_auth: "{{ SNAP_STORE_AUTH }}"
+    # store_id is omitted - will be auto-detected from device
+
+  # Example 4: Private snap with specific revision
+  - action: install_snap
+    name: private-snap-by-revision
+    revision: "123"
+    mode: classic
+    store_auth: "{{ SNAP_STORE_AUTH }}"
+    store_id: "{{ STORE_ID }}"
+
+  # Example 5: Private snap with branch
+  - action: install_snap
+    name: checkbox-tillamook
+    track: 22
+    risk: edge
+    branch: hotfix
+    store_auth: "{{ SNAP_STORE_AUTH }}"
+
+  # Example 6: Error handling with ignore_error
+  - action: install_snap
+    name: optional-private-snap
+    track: latest
+    risk: stable
+    store_auth: "{{ SNAP_STORE_AUTH }}"
+    ignore_error: true  # Continue even if this fails
+
+# Usage Instructions:
+# 
+# 1. Export your Snap Store credentials:
+#    $ snapcraft export-login ~/snap-credentials.txt
+#    
+# 2. Set the SNAP_STORE_AUTH environment variable:
+#    $ export SNAP_STORE_AUTH=$(cat ~/snap-credentials.txt | base64 -w 0)
+#
+# 3. (Optional) Set custom store ID if not auto-detecting:
+#    $ export STORE_ID="my-custom-store"
+#
+# 4. Run envicorn with this configuration:
+#    $ envicorn --config private_snap_example.yaml --ip <target-ip>
+#
+# How it works:
+# - If store_auth or store_id is provided, uses download-ack-install flow
+# - Downloads snap with authentication credentials
+# - Acknowledges the snap assertion (validates authenticity)
+# - Installs from local file
+# - Cleans up downloaded files automatically
+# - If store_id is not provided, attempts to auto-detect from device
