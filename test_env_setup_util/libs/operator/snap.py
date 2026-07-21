@@ -20,12 +20,14 @@ def get_store_id_from_device(session):
     ret, stdout, _ = session.launch_ssh_command(command)
 
     if ret != 0:
-        logging.debug("Failed to get snap model assertion, no custom store ID available")
+        logging.debug(
+            "Failed to get snap model assertion, no custom store ID available"
+        )
         return None
 
     # Parse the store field from the assertion
     # Format: "store: <store-id>"
-    match = re.search(r'^store:\s+(\S+)', stdout, re.MULTILINE)
+    match = re.search(r"^store:\s+(\S+)", stdout, re.MULTILINE)
     if match:
         store_id = match.group(1)
         logging.info("Detected store ID from device: %s", store_id)
@@ -98,7 +100,9 @@ def _install_snap_via_download(session, snap_data, store_id=None):
         logging.info("Acknowledging snap assertion")
         ret, _, stderr = session.launch_ssh_command(ack_cmd)
         if ret != 0:
-            raise SnapCommandError(f"Failed to acknowledge snap assertion: {stderr}")
+            raise SnapCommandError(
+                f"Failed to acknowledge snap assertion: {stderr}"
+            )
 
         # Step 3: Install from local file
         install_cmd = f"sudo snap install {quote(basename)}.snap"
@@ -108,7 +112,9 @@ def _install_snap_via_download(session, snap_data, store_id=None):
         logging.info("Installing snap from local file")
         ret, _, stderr = session.launch_ssh_command(install_cmd)
         if ret != 0:
-            raise SnapCommandError(f"Failed to install snap from file: {stderr}")
+            raise SnapCommandError(
+                f"Failed to install snap from file: {stderr}"
+            )
 
         return 0
 
@@ -200,7 +206,9 @@ def install_snap(session, snap_data):
     # Determine installation method based on authentication requirements
     if store_auth or store_id:
         # Use download-ack-install flow for private/authenticated snaps
-        logging.info("Installing %s snap using authenticated download method", name)
+        logging.info(
+            "Installing %s snap using authenticated download method", name
+        )
         ret = _install_snap_via_download(session, snap_data, store_id)
     else:
         # Use direct install for public snaps
