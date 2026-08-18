@@ -283,18 +283,61 @@ class SetupOperator:
         return ExitCode.Success
 
     @contextmanager
-    def _silence_retry_attempt_logs(self, enabled=False):
+    def _capture_retry_attempt_logs(self, enabled=False):
         if not enabled:
-            yield
+            yield None
             return
 
         logger = logging.getLogger()
-        original_level = logger.level
-        logger.setLevel(logging.CRITICAL)
+
+        class _CollectRecordsHandler(logging.Handler):
+            def __init__(self):
+                super().__init__()
+                self.records = []
+
+            def emit(self, record):
+                self.records.append(record)
+
+        class _DropAllFilter(logging.Filter):
+            def filter(self, record):
+                return False
+
+        collector = _CollectRecordsHandler()
+        drop_all = _DropAllFilter()
+
+        console_handlers = [
+            handler
+            for handler in logger.handlers
+            if isinstance(handler, logging.StreamHandler)
+            and not isinstance(handler, logging.FileHandler)
+        ]
+
+        logger.addHandler(collector)
+        for handler in console_handlers:
+            handler.addFilter(drop_all)
+
         try:
-            yield
+            yield collector
         finally:
-            logger.setLevel(original_level)
+            for handler in console_handlers:
+                handler.removeFilter(drop_all)
+            logger.removeHandler(collector)
+
+    def _replay_logs_to_console(self, records):
+        if not records:
+            return
+
+        logger = logging.getLogger()
+        console_handlers = [
+            handler
+            for handler in logger.handlers
+            if isinstance(handler, logging.StreamHandler)
+            and not isinstance(handler, logging.FileHandler)
+        ]
+
+        for record in records:
+            for handler in console_handlers:
+                handler.handle(record)
 
     def _do_action(
         self, action_model, execution_counts=3, retry_delay_seconds=1
@@ -305,12 +348,17 @@ class SetupOperator:
         logger = logging.getLogger()
         for attempt in range(1, execution_counts + 1):
             is_last_attempt = attempt >= execution_counts
-            suppress_attempt_logs = (
+            capture_attempt_logs = (
                 not logger.isEnabledFor(logging.DEBUG) and not is_last_attempt
             )
             try:
-                with self._silence_retry_attempt_logs(suppress_attempt_logs):
+                with self._capture_retry_attempt_logs(
+                    capture_attempt_logs
+                ) as collector:
                     action_handler(action_payload)
+
+                if collector:
+                    self._replay_logs_to_console(collector.records)
                 return
             except Exception as err:
                 if is_last_attempt:
@@ -476,7 +524,7 @@ def main() -> None:
         level = logging.INFO
 
     logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
+    logger.setLevel(level)
     console_handler = logging.StreamHandler()
     console_handler.setLevel(level)
     console_handler.setFormatter(logging.Formatter(log_format))
