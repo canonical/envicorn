@@ -41,7 +41,7 @@ def add_apt_source(session, ppa_data):
     - Public PPA shorthand: ppa:team/ppa-name (e.g., ppa:ubuntu/ubuntu-server)
       → Auto-detected as public, no auth needed, converted to Deb822 with defaults
     - Private PPA full URL: https://private-ppa.launchpadcontent.net/team/name/ubuntu
-      → Auto-detected as private, requires auth_user + auth_token_var
+      → Auto-detected as private, requires auth_user + auth_token
       → Converted to Deb822 with defaults (types: deb, components: main)
     - Explicit Deb822 fields: uris, suites, components, etc.
       → For advanced users who need fine-grained control
@@ -69,7 +69,7 @@ def add_apt_source(session, ppa_data):
     - trusted: (optional) Deb822 Trusted field
     - enabled: (optional) Deb822 Enabled field
     - auth_user: (optional) username for private repo authentication
-    - auth_token_var: (optional) env var name containing authentication token
+    - auth_token: (optional) env var name containing authentication token
     - fingerprint: (optional) GPG key fingerprint to verify packages
     - key_server: (optional) GPG key server URL, default "keyserver.ubuntu.com"
 
@@ -85,7 +85,7 @@ def add_apt_source(session, ppa_data):
         ppa_name: leuven-gstreamer
         suites: noble
         auth_user: your-username
-        auth_token_var: PPA_TOKEN
+        auth_token: PPA_TOKEN
         fingerprint: XXXXXXXXXXXXXXXXXXXXXXXXXXXXX
         key_server: keyserver.ubuntu.com
     """
@@ -100,6 +100,8 @@ def add_apt_source(session, ppa_data):
         raise ValueError("Either ppa_url or deb822 fields are required")
 
     auth_user = ppa_data.get("auth_user")
+    if auth_user and _find_env_pattern(auth_user):
+        auth_user = _get_env(_find_env_pattern(auth_user))
     auth_token_key = ppa_data.get("auth_token")
 
     auth_token = None
