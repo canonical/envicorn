@@ -116,7 +116,8 @@ yaml.representer.SafeRepresenter.add_representer(str, _str_presenter)
 DEFAULT_EXECUTION_COUNTS = 3
 DEFAULT_RETRY_DELAY_SECONDS = 1
 
-class ActionRunner:
+
+class ActionWrapper:
     """Retry wrapper for action execution with optional log capture."""
 
     def __init__(self):
@@ -129,10 +130,14 @@ class ActionRunner:
             action_model,
         ):
             execution_counts = self._resolve_execution_counts(
-                instance._variables.get("EXECUTION_COUNTS", DEFAULT_EXECUTION_COUNTS)
+                instance._variables.get(
+                    "EXECUTION_COUNTS", DEFAULT_EXECUTION_COUNTS
+                )
             )
             retry_delay_seconds = self._resolve_retry_delay_seconds(
-                instance._variables.get("RETRY_DELAY_SECONDS", DEFAULT_RETRY_DELAY_SECONDS)
+                instance._variables.get(
+                    "RETRY_DELAY_SECONDS", DEFAULT_RETRY_DELAY_SECONDS
+                )
             )
 
             logger = logging.getLogger()
@@ -403,7 +408,7 @@ class SetupOperator:
             yaml.dump({"actions": rendered_actions}, f)
         return ExitCode.Success
 
-    @ActionRunner()
+    @ActionWrapper()
     def _do_action(self, action_model):
         action_handler = getattr(self, f"_{action_model.action}")
         action_payload = action_model.model_dump()
