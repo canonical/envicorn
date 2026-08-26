@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import ast
+from functools import wraps
 import glob
 import jinja2
 import logging
@@ -110,6 +111,160 @@ def _str_presenter(dumper, data):
 
 yaml.add_representer(str, _str_presenter)
 yaml.representer.SafeRepresenter.add_representer(str, _str_presenter)
+
+
+DEFAULT_EXECUTION_COUNTS = 3
+DEFAULT_RETRY_DELAY_SECONDS = 1
+
+class ActionRunner:
+    """Retry wrapper for action execution with optional log capture."""
+
+    def __init__(self):
+        pass
+
+    def __call__(self, func):
+        @wraps(func)
+        def wrapper(
+            instance,
+            action_model,
+        ):
+            execution_counts = self._resolve_execution_counts(
+                instance._variables.get("EXECUTION_COUNTS", DEFAULT_EXECUTION_COUNTS)
+            )
+            retry_delay_seconds = self._resolve_retry_delay_seconds(
+                instance._variables.get("RETRY_DELAY_SECONDS", DEFAULT_RETRY_DELAY_SECONDS)
+            )
+
+            logger = logging.getLogger()
+            for attempt in range(1, execution_counts + 1):
+                is_last_attempt = attempt >= execution_counts
+                capture_attempt_logs = (
+                    not logger.isEnabledFor(logging.DEBUG)
+                    and not is_last_attempt
+                )
+                try:
+                    with self._capture_retry_attempt_logs(
+                        capture_attempt_logs
+                    ) as collector:
+                        func(
+                            instance,
+                            action_model,
+                        )
+                    if collector:
+                        self._replay_logs_to_console(collector.records)
+                    return
+                except Exception as err:
+                    if is_last_attempt:
+                        raise
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logging.debug(
+                            (
+                                "Action %s failed on attempt %d/%d: %s. "
+                                "Retrying in %.2fs"
+                            ),
+                            action_model.action,
+                            attempt,
+                            execution_counts,
+                            err,
+                            retry_delay_seconds,
+                            exc_info=True,
+                        )
+                time.sleep(retry_delay_seconds)
+
+        return wrapper
+
+    def _resolve_execution_counts(self, value):
+        try:
+            execution_counts = int(value)
+            if execution_counts < 0:
+                logging.warning(
+                    "EXECUTION_COUNTS must be >= 0, defaulting to %d",
+                    DEFAULT_EXECUTION_COUNTS,
+                )
+                execution_counts = DEFAULT_EXECUTION_COUNTS
+        except (TypeError, ValueError):
+            logging.warning(
+                "EXECUTION_COUNTS must be an integer, defaulting to %d",
+                DEFAULT_EXECUTION_COUNTS,
+            )
+            execution_counts = DEFAULT_EXECUTION_COUNTS
+
+        return execution_counts
+
+    def _resolve_retry_delay_seconds(self, value):
+        try:
+            retry_delay_seconds = float(value)
+            if retry_delay_seconds < 0:
+                logging.warning(
+                    "RETRY_DELAY_SECONDS must be >= 0, defaulting to %.2f",
+                    DEFAULT_RETRY_DELAY_SECONDS,
+                )
+                retry_delay_seconds = DEFAULT_RETRY_DELAY_SECONDS
+        except (TypeError, ValueError):
+            logging.warning(
+                "RETRY_DELAY_SECONDS must be a number, defaulting to %.2f",
+                DEFAULT_RETRY_DELAY_SECONDS,
+            )
+            retry_delay_seconds = DEFAULT_RETRY_DELAY_SECONDS
+
+        return retry_delay_seconds
+
+    @contextmanager
+    def _capture_retry_attempt_logs(self, enabled=False):
+        if not enabled:
+            yield None
+            return
+
+        logger = logging.getLogger()
+
+        class _CollectRecordsHandler(logging.Handler):
+            def __init__(self):
+                super().__init__()
+                self.records = []
+
+            def emit(self, record):
+                self.records.append(record)
+
+        class _DropAllFilter(logging.Filter):
+            def filter(self, record):
+                return False
+
+        collector = _CollectRecordsHandler()
+        drop_all = _DropAllFilter()
+
+        console_handlers = [
+            handler
+            for handler in logger.handlers
+            if isinstance(handler, logging.StreamHandler)
+            and not isinstance(handler, logging.FileHandler)
+        ]
+
+        logger.addHandler(collector)
+        for handler in console_handlers:
+            handler.addFilter(drop_all)
+
+        try:
+            yield collector
+        finally:
+            for handler in console_handlers:
+                handler.removeFilter(drop_all)
+            logger.removeHandler(collector)
+
+    def _replay_logs_to_console(self, records):
+        if not records:
+            return
+
+        logger = logging.getLogger()
+        console_handlers = [
+            handler
+            for handler in logger.handlers
+            if isinstance(handler, logging.StreamHandler)
+            and not isinstance(handler, logging.FileHandler)
+        ]
+
+        for record in records:
+            for handler in console_handlers:
+                handler.handle(record)
 
 
 class SetupOperator:
@@ -239,40 +394,6 @@ class SetupOperator:
         new_contents = yaml.safe_load(content)
         return new_contents
 
-    def _resolve_execution_counts(self):
-        value = self._variables.get("EXECUTION_COUNTS", 3)
-        try:
-            execution_counts = int(value)
-            if execution_counts < 0:
-                logging.warning(
-                    "EXECUTION_COUNTS must be >= 0, defaulting to 3"
-                )
-                execution_counts = 3
-        except (TypeError, ValueError):
-            logging.warning(
-                "EXECUTION_COUNTS must be an integer, defaulting to 3"
-            )
-            execution_counts = 3
-
-        return execution_counts
-
-    def _resolve_retry_delay_seconds(self):
-        value = self._variables.get("RETRY_DELAY_SECONDS", 1)
-        try:
-            retry_delay_seconds = float(value)
-            if retry_delay_seconds < 0:
-                logging.warning(
-                    "RETRY_DELAY_SECONDS must be >= 0, defaulting to 1"
-                )
-                retry_delay_seconds = 1
-        except (TypeError, ValueError):
-            logging.warning(
-                "RETRY_DELAY_SECONDS must be a number, defaulting to 1"
-            )
-            retry_delay_seconds = 1
-
-        return retry_delay_seconds
-
     def dump(self):
         raw_actions, _, _ = self._load_env_setup_file(self._root_yaml)
         rendered_actions = self._replace_variables(raw_actions)
@@ -282,101 +403,11 @@ class SetupOperator:
             yaml.dump({"actions": rendered_actions}, f)
         return ExitCode.Success
 
-    @contextmanager
-    def _capture_retry_attempt_logs(self, enabled=False):
-        if not enabled:
-            yield None
-            return
-
-        logger = logging.getLogger()
-
-        class _CollectRecordsHandler(logging.Handler):
-            def __init__(self):
-                super().__init__()
-                self.records = []
-
-            def emit(self, record):
-                self.records.append(record)
-
-        class _DropAllFilter(logging.Filter):
-            def filter(self, record):
-                return False
-
-        collector = _CollectRecordsHandler()
-        drop_all = _DropAllFilter()
-
-        console_handlers = [
-            handler
-            for handler in logger.handlers
-            if isinstance(handler, logging.StreamHandler)
-            and not isinstance(handler, logging.FileHandler)
-        ]
-
-        logger.addHandler(collector)
-        for handler in console_handlers:
-            handler.addFilter(drop_all)
-
-        try:
-            yield collector
-        finally:
-            for handler in console_handlers:
-                handler.removeFilter(drop_all)
-            logger.removeHandler(collector)
-
-    def _replay_logs_to_console(self, records):
-        if not records:
-            return
-
-        logger = logging.getLogger()
-        console_handlers = [
-            handler
-            for handler in logger.handlers
-            if isinstance(handler, logging.StreamHandler)
-            and not isinstance(handler, logging.FileHandler)
-        ]
-
-        for record in records:
-            for handler in console_handlers:
-                handler.handle(record)
-
-    def _do_action(
-        self, action_model, execution_counts=3, retry_delay_seconds=1
-    ):
-        # Retry transient network failures before marking action failed.
+    @ActionRunner()
+    def _do_action(self, action_model):
         action_handler = getattr(self, f"_{action_model.action}")
         action_payload = action_model.model_dump()
-        logger = logging.getLogger()
-        for attempt in range(1, execution_counts + 1):
-            is_last_attempt = attempt >= execution_counts
-            capture_attempt_logs = (
-                not logger.isEnabledFor(logging.DEBUG) and not is_last_attempt
-            )
-            try:
-                with self._capture_retry_attempt_logs(
-                    capture_attempt_logs
-                ) as collector:
-                    action_handler(action_payload)
-
-                if collector:
-                    self._replay_logs_to_console(collector.records)
-                return
-            except Exception as err:
-                if is_last_attempt:
-                    raise
-                if logger.isEnabledFor(logging.DEBUG):
-                    logging.debug(
-                        (
-                            "Action %s failed on attempt %d/%d: %s. "
-                            "Retrying in %.2fs"
-                        ),
-                        action_model.action,
-                        attempt,
-                        execution_counts,
-                        err,
-                        retry_delay_seconds,
-                        exc_info=True,
-                    )
-            time.sleep(retry_delay_seconds)
+        action_handler(action_payload)
 
     def run(self):
         exit_code = ExitCode.Success
@@ -385,8 +416,12 @@ class SetupOperator:
             self._root_yaml
         )
 
-        execution_counts = self._resolve_execution_counts()
-        retry_delay_seconds = self._resolve_retry_delay_seconds()
+        execution_counts = self._variables.get(
+            "EXECUTION_COUNTS", DEFAULT_EXECUTION_COUNTS
+        )
+        retry_delay_seconds = self._variables.get(
+            "RETRY_DELAY_SECONDS", DEFAULT_RETRY_DELAY_SECONDS
+        )
         logging.info(
             "Action execution policy: executions=%s, retry_delay=%.2fs",
             execution_counts,
@@ -428,9 +463,7 @@ class SetupOperator:
                 logging.info(" Action %d : %s", idx, action_model.action)
                 logging.info(" source file: %s", actions_src[idx - 1])
                 logging.info("=" * 30)
-                self._do_action(
-                    action_model, execution_counts, retry_delay_seconds
-                )
+                self._do_action(action_model)
                 results[idx] = "Success"
             except Exception as err:
                 logging.error(
