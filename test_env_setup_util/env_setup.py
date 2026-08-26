@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 import argparse
 import ast
+from functools import wraps
 import glob
 import jinja2
 import logging
 import os
 import paramiko
 import sys
+import time
 import paramiko.ssh_exception
 import yaml
 import operator as op
 
+from contextlib import contextmanager
 from pathlib import Path
 from pydantic import ValidationError
 from test_env_setup_util.libs.common import (
@@ -108,6 +111,165 @@ def _str_presenter(dumper, data):
 
 yaml.add_representer(str, _str_presenter)
 yaml.representer.SafeRepresenter.add_representer(str, _str_presenter)
+
+
+DEFAULT_EXECUTION_COUNTS = 3
+DEFAULT_RETRY_DELAY_SECONDS = 1
+
+
+class ActionWrapper:
+    """Retry wrapper for action execution with optional log capture."""
+
+    def __init__(self):
+        pass
+
+    def __call__(self, func):
+        @wraps(func)
+        def wrapper(
+            instance,
+            action_model,
+        ):
+            execution_counts = self._resolve_execution_counts(
+                instance._variables.get(
+                    "EXECUTION_COUNTS", DEFAULT_EXECUTION_COUNTS
+                )
+            )
+            retry_delay_seconds = self._resolve_retry_delay_seconds(
+                instance._variables.get(
+                    "RETRY_DELAY_SECONDS", DEFAULT_RETRY_DELAY_SECONDS
+                )
+            )
+
+            logger = logging.getLogger()
+            for attempt in range(1, execution_counts + 1):
+                is_last_attempt = attempt >= execution_counts
+                capture_attempt_logs = (
+                    not logger.isEnabledFor(logging.DEBUG)
+                    and not is_last_attempt
+                )
+                try:
+                    with self._capture_retry_attempt_logs(
+                        capture_attempt_logs
+                    ) as collector:
+                        func(
+                            instance,
+                            action_model,
+                        )
+                    if collector:
+                        self._replay_logs_to_console(collector.records)
+                    return
+                except Exception as err:
+                    if is_last_attempt:
+                        raise
+                    if logger.isEnabledFor(logging.DEBUG):
+                        logging.debug(
+                            (
+                                "Action %s failed on attempt %d/%d: %s. "
+                                "Retrying in %.2fs"
+                            ),
+                            action_model.action,
+                            attempt,
+                            execution_counts,
+                            err,
+                            retry_delay_seconds,
+                            exc_info=True,
+                        )
+                time.sleep(retry_delay_seconds)
+
+        return wrapper
+
+    def _resolve_execution_counts(self, value):
+        try:
+            execution_counts = int(value)
+            if execution_counts < 0:
+                logging.warning(
+                    "EXECUTION_COUNTS must be >= 0, defaulting to %d",
+                    DEFAULT_EXECUTION_COUNTS,
+                )
+                execution_counts = DEFAULT_EXECUTION_COUNTS
+        except (TypeError, ValueError):
+            logging.warning(
+                "EXECUTION_COUNTS must be an integer, defaulting to %d",
+                DEFAULT_EXECUTION_COUNTS,
+            )
+            execution_counts = DEFAULT_EXECUTION_COUNTS
+
+        return execution_counts
+
+    def _resolve_retry_delay_seconds(self, value):
+        try:
+            retry_delay_seconds = float(value)
+            if retry_delay_seconds < 0:
+                logging.warning(
+                    "RETRY_DELAY_SECONDS must be >= 0, defaulting to %.2f",
+                    DEFAULT_RETRY_DELAY_SECONDS,
+                )
+                retry_delay_seconds = DEFAULT_RETRY_DELAY_SECONDS
+        except (TypeError, ValueError):
+            logging.warning(
+                "RETRY_DELAY_SECONDS must be a number, defaulting to %.2f",
+                DEFAULT_RETRY_DELAY_SECONDS,
+            )
+            retry_delay_seconds = DEFAULT_RETRY_DELAY_SECONDS
+
+        return retry_delay_seconds
+
+    @contextmanager
+    def _capture_retry_attempt_logs(self, enabled=False):
+        if not enabled:
+            yield None
+            return
+
+        logger = logging.getLogger()
+
+        class _CollectRecordsHandler(logging.Handler):
+            def __init__(self):
+                super().__init__()
+                self.records = []
+
+            def emit(self, record):
+                self.records.append(record)
+
+        class _DropAllFilter(logging.Filter):
+            def filter(self, record):
+                return False
+
+        collector = _CollectRecordsHandler()
+        drop_all = _DropAllFilter()
+
+        console_handlers = [
+            handler
+            for handler in logger.handlers
+            if isinstance(handler, logging.StreamHandler)
+            and not isinstance(handler, logging.FileHandler)
+        ]
+
+        logger.addHandler(collector)
+        for handler in console_handlers:
+            handler.addFilter(drop_all)
+
+        try:
+            yield collector
+        finally:
+            for handler in console_handlers:
+                handler.removeFilter(drop_all)
+            logger.removeHandler(collector)
+
+    def _replay_logs_to_console(self, records):
+        if not records:
+            return
+
+        logger = logging.getLogger()
+        console_handlers = [
+            handler
+            for handler in logger.handlers
+            if isinstance(handler, logging.StreamHandler)
+            and not isinstance(handler, logging.FileHandler)
+        ]
+
+        for record in records:
+            for handler in console_handlers:
+                handler.handle(record)
 
 
 class SetupOperator:
@@ -246,11 +408,29 @@ class SetupOperator:
             yaml.dump({"actions": rendered_actions}, f)
         return ExitCode.Success
 
+    @ActionWrapper()
+    def _do_action(self, action_model):
+        action_handler = getattr(self, f"_{action_model.action}")
+        action_payload = action_model.model_dump()
+        action_handler(action_payload)
+
     def run(self):
         exit_code = ExitCode.Success
         results = {}
         raw_actions, actions_src, bypass_actions = self._load_env_setup_file(
             self._root_yaml
+        )
+
+        execution_counts = self._variables.get(
+            "EXECUTION_COUNTS", DEFAULT_EXECUTION_COUNTS
+        )
+        retry_delay_seconds = self._variables.get(
+            "RETRY_DELAY_SECONDS", DEFAULT_RETRY_DELAY_SECONDS
+        )
+        logging.info(
+            "Action execution policy: executions=%s, retry_delay=%.2fs",
+            execution_counts,
+            retry_delay_seconds,
         )
 
         rendered_actions = self._replace_variables(raw_actions)
@@ -288,12 +468,16 @@ class SetupOperator:
                 logging.info(" Action %d : %s", idx, action_model.action)
                 logging.info(" source file: %s", actions_src[idx - 1])
                 logging.info("=" * 30)
-                getattr(self, f"_{action_model.action}")(
-                    action_model.model_dump()
-                )
+                self._do_action(action_model)
                 results[idx] = "Success"
             except Exception as err:
-                logging.error(err)
+                logging.error(
+                    "Action %d (%s) failed after %d execution(s): %s",
+                    idx,
+                    action_model.action,
+                    execution_counts,
+                    err,
+                )
                 results[idx] = "Failed"
                 if action_model.ignore_error:
                     continue
@@ -338,7 +522,10 @@ def register_arguments() -> argparse.Namespace:
         "--password",
         type=str,
         default=None,
-        help="password for login to DUT (prefer ENVICORN_PASSWORD env var for security)",
+        help=(
+            "password for login to DUT "
+            "(prefer ENVICORN_PASSWORD env var for security)"
+        ),
     )
     setup_parser.add_argument(
         "--private-key-file", type=str, help="SSH private key file"
@@ -375,7 +562,7 @@ def main() -> None:
         level = logging.INFO
 
     logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
+    logger.setLevel(level)
     console_handler = logging.StreamHandler()
     console_handler.setLevel(level)
     console_handler.setFormatter(logging.Formatter(log_format))
@@ -413,10 +600,10 @@ def main() -> None:
                 root_path, env_setup_file, session, variables
             )
             sys.exit(operator.run())
-        except paramiko.ssh_exception.PasswordRequiredException as err:
+        except paramiko.ssh_exception.PasswordRequiredException:
             logging.error("# password and passphrase is needed")
             sys.exit(ExitCode.SSH_AUTH_REQUIRED_PASSWORD_PASSPHRASE)
-        except paramiko.ssh_exception.AuthenticationException as err:
+        except paramiko.ssh_exception.AuthenticationException:
             logging.error("# Username or Password is incorrect")
             sys.exit(ExitCode.SSH_AUTH_INVALID_USERNAME_PASSWORD)
     elif args.mode == "dump":
