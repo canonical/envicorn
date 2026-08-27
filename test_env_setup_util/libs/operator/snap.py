@@ -3,6 +3,7 @@ import re
 
 from shlex import quote
 from test_env_setup_util.libs.exceptions import SnapCommandError
+from test_env_setup_util.libs.common import _find_env_pattern, _get_env
 
 
 def get_store_id_from_device(session):
@@ -71,9 +72,19 @@ def _install_snap_via_download(session, snap_data, store_id=None):
     # Build environment variables for authentication
     env_vars = ""
     if store_id:
-        env_vars += f"UBUNTU_STORE_ID={quote(store_id)} "
+        env_vars += f"UBUNTU_STORE_ID={store_id} "
     if store_auth:
-        env_vars += f"UBUNTU_STORE_AUTH={quote(store_auth)} "
+        if _find_env_pattern(store_auth):
+            auth_token = _get_env(_find_env_pattern(store_auth))
+            if not auth_token:
+                logging.warning(
+                    "Environment variable '%s' not found for %s",
+                    store_auth,
+                    name,
+                )
+        else:
+            auth_token = store_auth.strip()
+        env_vars += f"UBUNTU_STORE_AUTH={auth_token} "
 
     # Build channel or revision specification
     if revision:
@@ -89,7 +100,9 @@ def _install_snap_via_download(session, snap_data, store_id=None):
 
     try:
         # Step 1: Download the snap with authentication
-        download_cmd = f"{env_vars}snap download {quote(name)} {channel_spec} --basename={quote(basename)}"
+        download_cmd = "{}snap download {} {} --basename={}".format(
+            env_vars, quote(name), channel_spec, quote(basename)
+        )
         logging.info("Downloading snap with authentication")
         ret, _, stderr = session.launch_ssh_command(download_cmd)
         if ret != 0:
@@ -194,7 +207,7 @@ def install_snap(session, snap_data):
             - revision: Specific revision (optional)
             - mode: Installation mode (classic/devmode/dangerous)
             - store_auth: Base64 encoded store credentials (optional)
-            - store_id: Custom store ID (optional, auto-detected if not provided)
+            - store_id: store ID (optional, auto-detected if not provided)
             - post_commands: Commands to run after installation (optional)
     """
     check_snap_utility(session)
