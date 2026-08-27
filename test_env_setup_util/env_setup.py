@@ -435,19 +435,32 @@ class SetupOperator:
 
         rendered_actions = self._replace_variables(raw_actions)
         try:
-            if "install_debian" in [a["action"] for a in rendered_actions]:
+            install_debian_index = next(
+                (
+                    idx
+                    for idx, action in enumerate(rendered_actions)
+                    if action["action"] == "install_debian"
+                ),
+                None,
+            )
+
+            if install_debian_index is not None:
                 rendered_actions.insert(
-                    0,
+                    install_debian_index,
                     SshCommandAction(
                         action="ssh_command",
                         command="sudo apt update",
                     ).model_dump(),
                 )
-                actions_src.insert(0, "auto-generated: sudo apt update")
+                actions_src.insert(
+                    install_debian_index,
+                    "auto-generated: sudo apt update",
+                )
                 logging.info(
                     (
                         "install_debian action detected, automatically "
-                        "prepend 'sudo apt update' command to "
+                        "insert 'sudo apt update' command before the "
+                        "first install_debian action to "
                         "ensure package lists are up to date"
                     )
                 )
