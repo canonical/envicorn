@@ -62,6 +62,8 @@ class InstallSnapAction(BaseAction):
     revision: str | None = None
     mode: str = ""
     post_commands: str | None = None
+    store_auth: str | None = None
+    store_id: str | None = None
 
     @field_validator("mode")
     def check_mode(cls, mode: str):
@@ -82,6 +84,18 @@ class InstallSnapAction(BaseAction):
                 "risk must be one of 'stable', 'candidate', 'beta', 'edge'"
             )
         return risk
+
+    @field_validator("store_auth")
+    def check_store_auth(cls, store_auth: str | None):
+        if store_auth is None:
+            return store_auth
+        return _ensure_non_empty_str(store_auth, "store_auth")
+
+    @field_validator("store_id")
+    def check_store_id(cls, store_id: str | None):
+        if store_id is None:
+            return store_id
+        return _ensure_non_empty_str(store_id, "store_id")
 
     @model_validator(mode="after")
     def check_branch_risk_dependency(self):
