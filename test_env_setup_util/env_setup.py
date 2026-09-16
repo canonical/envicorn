@@ -114,7 +114,7 @@ yaml.representer.SafeRepresenter.add_representer(str, _str_presenter)
 
 
 DEFAULT_EXECUTION_COUNTS = 3
-DEFAULT_RETRY_DELAY_SECONDS = 1
+DEFAULT_RETRY_DELAY_SECONDS = 10
 
 
 class ActionWrapper:
