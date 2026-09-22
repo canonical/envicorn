@@ -42,7 +42,11 @@ def local_command(data):
 
 
 def scp_command(session, data):
-    session.launch_scp_upload(data["source"], data["destination"])
+    session.launch_scp_upload(
+        data["source"],
+        data["destination"],
+        recursive=data.get("recursive", False),
+    )
 
 
 def _gen_file_and_scp(contents, filename, session):

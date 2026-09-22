@@ -68,15 +68,19 @@ class RemoteSshSession:
 
         return exit_code, log_stdout, log_stderr
 
-    def launch_scp_upload(self, src, dest):
+    def launch_scp_upload(self, src, dest, recursive=False):
         source_path = Path(src)
         if not source_path.exists():
             raise FileNotFoundError(f"{source_path} is not available")
+        if source_path.is_dir() and not recursive:
+            raise IsADirectoryError(
+                f"{source_path} is a directory: set 'recursive: true'"
+            )
 
         try:
             with self._create_client() as client:
                 with SCPClient(client.get_transport()) as scp:
-                    scp.put(src, dest)
+                    scp.put(src, dest, recursive=recursive)
         except SCPException as e:
             logging.error("SCP transfer failed: %s", str(e))
             raise

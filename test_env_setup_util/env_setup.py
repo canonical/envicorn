@@ -324,8 +324,9 @@ class SetupOperator:
 
     def _scp_command(self, data):
         logging.info(
-            "Upload %s file to %s:%s",
+            "Upload %s %s to %s:%s",
             data["source"],
+            "directory" if data.get("recursive") else "file",
             self._ssh_session._ip,
             data["destination"],
         )

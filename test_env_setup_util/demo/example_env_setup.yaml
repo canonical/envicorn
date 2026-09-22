@@ -41,5 +41,11 @@ actions:
   - action: scp_command
     source: /tmp/envicorn-downloads/index.html
     destination: index.html
+  # a whole directory goes over with recursive: true (like scp -r): here it
+  # lands as /home/<user>/envicorn-downloads/ on the DUT
+  - action: scp_command
+    source: /tmp/envicorn-downloads
+    destination: .
+    recursive: true
   - action: load_template
     name: get_initial_network_info.yaml

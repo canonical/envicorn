@@ -119,6 +119,9 @@ class ScpCommandAction(BaseAction):
     action: Literal["scp_command"]
     source: str
     destination: str
+    # upload a whole directory (like `scp -r`): the directory itself is
+    # created under `destination` on the DUT
+    recursive: bool = False
 
 
 class CreateSystemServiceAction(BaseAction):
