@@ -23,5 +23,15 @@ actions:
   - action: scp_command
     source: enable_audio_via_alsa.py
     destination: enable_audio_via_alsa.py
+  # local_command runs on the host that runs Envicorn, not on the DUT: fetch
+  # or build something here, then upload it with scp_command. Same rules as
+  # ssh_command (set -ex unless continue_on_error, retries on failure).
+  - action: local_command
+    command: |
+      mkdir -p /tmp/envicorn-downloads
+      wget -nc -P /tmp/envicorn-downloads https://example.com/index.html
+  - action: scp_command
+    source: /tmp/envicorn-downloads/index.html
+    destination: index.html
   - action: load_template
     name: get_initial_network_info.yaml

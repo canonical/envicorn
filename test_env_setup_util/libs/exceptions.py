@@ -11,6 +11,11 @@ class SshCommandError(Exception):
         super().__init__(f"failed to executed '{command}'")
 
 
+class LocalCommandError(Exception):
+    def __init__(self, command):
+        super().__init__(f"failed to execute locally '{command}'")
+
+
 class ExitCode(enum.IntEnum):
     Success = 0
     SSH_AUTH_Failed = 10

@@ -4,12 +4,41 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from test_env_setup_util.libs.exceptions import LocalCommandError
+
 
 def ssh_command(session, data):
     session.launch_ssh_command(
         data["command"],
         continue_on_error=data.get("continue_on_error", False),
     )
+
+
+def local_command(data):
+    """Run a shell command on the host running Envicorn (not the DUT).
+
+    Same semantics as ssh_command: the command runs under `set -ex` (stop
+    at the first failing line) unless continue_on_error is set, and a
+    non-zero exit raises so the action retry/exit-code logic applies.
+    """
+    command = data["command"]
+    continue_on_error = data.get("continue_on_error", False)
+    prefix = "set -x\n" if continue_on_error else "set -ex\n"
+    result = subprocess.run(
+        ["bash", "-c", prefix + command],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    logging.info("## local command output:")
+    logging.info("$ %s", command)
+    logging.info("> response: \n%s", result.stdout)
+    logging.info("> exit code: %s", result.returncode)
+    if result.stderr:
+        logging.info("> stderr: \n%s", result.stderr)
+    if result.returncode != 0 and not continue_on_error:
+        raise LocalCommandError(command)
+    return result.returncode, result.stdout, result.stderr
 
 
 def scp_command(session, data):

@@ -17,6 +17,8 @@ $ sudo snap install ce-qa-env-setup-tools --classic
 
 Setup up your test environment on DUT remotely, including install snaps and debian packages on DUT and creates system services.
 
+Actions run on the DUT over SSH (`install_snap`, `install_debian`, `add_apt_source`, `ssh_command`, `scp_command`, `create_service`), except `local_command`, which runs a shell command on the host that runs this tool — e.g. `wget` a snap or build an artifact, then upload it with `scp_command`. See `test_env_setup_util/demo/example_env_setup.yaml` for every action.
+
 ### Usage
 
 This utility perform actions defined in a configuration file to setup the test environment:

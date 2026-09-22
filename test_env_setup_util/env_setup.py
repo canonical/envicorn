@@ -26,6 +26,7 @@ from test_env_setup_util.libs.exceptions import ExitCode
 from test_env_setup_util.libs.model import EnvSetup, SshCommandAction
 from test_env_setup_util.libs.operator.common import (
     ssh_command,
+    local_command,
     scp_command,
     create_system_service,
 )
@@ -291,6 +292,11 @@ class SetupOperator:
 
     def _ssh_command(self, data):
         ssh_command(self._ssh_session, data)
+
+    def _local_command(self, data):
+        """Run a command on this host (e.g. fetch a file for a scp_command)."""
+        logging.info("# Running on the local host")
+        local_command(data)
 
     def _install_snap(self, data):
         """Install required snap packages listed in configuration files

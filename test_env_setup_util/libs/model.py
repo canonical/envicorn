@@ -103,6 +103,18 @@ class SshCommandAction(BaseAction):
     continue_on_error: bool = False
 
 
+class LocalCommandAction(BaseAction):
+    """Run a shell command on the host that runs Envicorn, not on the DUT.
+
+    Typical use: fetch an artifact (wget/curl) or build something locally,
+    then upload it with a following scp_command.
+    """
+
+    action: Literal["local_command"]
+    command: str
+    continue_on_error: bool = False
+
+
 class ScpCommandAction(BaseAction):
     action: Literal["scp_command"]
     source: str
@@ -279,6 +291,7 @@ ActionUnion = Annotated[
         Annotated[InstallSnapAction, Tag("install_snap")],
         Annotated[InstallDebianAction, Tag("install_debian")],
         Annotated[SshCommandAction, Tag("ssh_command")],
+        Annotated[LocalCommandAction, Tag("local_command")],
         Annotated[ScpCommandAction, Tag("scp_command")],
         Annotated[CreateSystemServiceAction, Tag("create_service")],
         Annotated[LoadTemplateAction, Tag("load_template")],
