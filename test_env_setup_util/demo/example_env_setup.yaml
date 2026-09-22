@@ -25,11 +25,19 @@ actions:
     destination: enable_audio_via_alsa.py
   # local_command runs on the host that runs Envicorn, not on the DUT: fetch
   # or build something here, then upload it with scp_command. Same rules as
-  # ssh_command (set -ex unless continue_on_error, retries on failure).
+  # ssh_command (set -ex unless continue_on_error, retries on failure), so
+  # write the command so a re-run exits 0 when the artifact is already there:
+  # skip the download explicitly (not `wget -nc`, whose exit status for an
+  # existing file differs between wget versions) and download to a .part
+  # name so an interrupted transfer cannot pass the check next time.
   - action: local_command
     command: |
       mkdir -p /tmp/envicorn-downloads
-      wget -nc -P /tmp/envicorn-downloads https://example.com/index.html
+      cd /tmp/envicorn-downloads
+      if [ ! -f index.html ]; then
+          wget -q -O index.html.part https://example.com/index.html
+          mv index.html.part index.html
+      fi
   - action: scp_command
     source: /tmp/envicorn-downloads/index.html
     destination: index.html
